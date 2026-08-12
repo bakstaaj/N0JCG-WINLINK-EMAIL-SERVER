@@ -62,13 +62,20 @@ From an MSYS2 Bash terminal, `deploy/push_to_pi.sh` copies the complete source
 set to the Pi and starts the installer remotely:
 
 ```bash
-./deploy/push_to_pi.sh pi@192.168.68.149
+./deploy/push_to_pi.sh
+```
+
+The helper prompts for the Raspberry Pi IP address and SSH username, defaulting
+to `192.168.68.149` and `pi`. For repeatable deployment, provide them directly:
+
+```bash
+./deploy/push_to_pi.sh 192.168.68.149 pi
 ```
 
 To intentionally reconfigure the Nginx operator account during an upgrade:
 
 ```bash
-./deploy/push_to_pi.sh pi@192.168.68.149 /tmp/n0jcg-winlink-source --configure-operator-auth
+./deploy/push_to_pi.sh 192.168.68.149 pi --configure-operator-auth
 ```
 
 ## Safety boundary

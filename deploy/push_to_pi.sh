@@ -2,9 +2,22 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REMOTE_HOST="${1:-pi@192.168.68.149}"
-REMOTE_ROOT="${2:-/tmp/n0jcg-winlink-source}"
+PI_IP="${1:-}"
+PI_USER="${2:-}"
+REMOTE_ROOT="/tmp/n0jcg-winlink-source"
 AUTH_OPTION="${3:-}"
+
+if [[ -z "$PI_IP" ]]; then
+    printf '%s' 'Raspberry Pi IP address [192.168.68.149]: '
+    read -r PI_IP
+    PI_IP="${PI_IP:-192.168.68.149}"
+fi
+if [[ -z "$PI_USER" ]]; then
+    printf '%s' 'Raspberry Pi SSH username [pi]: '
+    read -r PI_USER
+    PI_USER="${PI_USER:-pi}"
+fi
+REMOTE_HOST="$PI_USER@$PI_IP"
 
 if [[ -n "$AUTH_OPTION" && "$AUTH_OPTION" != "--configure-operator-auth" ]]; then
     echo "FAIL: supported optional flag is --configure-operator-auth" >&2
