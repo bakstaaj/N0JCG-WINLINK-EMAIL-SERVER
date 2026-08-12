@@ -58,6 +58,13 @@ installer provisions the static UI, installs `apache2-utils` when needed, and
 then requires an operator username, password, and matching password
 confirmation. Later runs preserve the existing operator account.
 
+From an MSYS2 Bash terminal, `deploy/push_to_pi.sh` copies the complete source
+set to the Pi and starts the installer remotely:
+
+```bash
+./deploy/push_to_pi.sh pi@192.168.68.149
+```
+
 ## Safety boundary
 
 The appliance must not enable transmission merely because a USB device is present. RF operation requires an explicit operator enable, a configured radio profile, a selected Packet RMS gateway, and bounded PTT policy. USB/audio/serial detection is hardware evidence only; it is not proof of PTT or RF operation.
