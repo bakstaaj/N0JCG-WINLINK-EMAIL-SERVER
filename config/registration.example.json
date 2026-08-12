@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "product_id": "N0JCG-WINLINK-EMAIL-SERVER",
+  "product_display_name": "N0JCG Winlink Email Server",
+  "registration_status": "unregistered",
+  "device_id": null,
+  "registration_request": null,
+  "license_id": null,
+  "registered_to": null,
+  "activated_at": null,
+  "expires_at": null,
+  "entitlements": [],
+  "verification": "pending"
+}
+

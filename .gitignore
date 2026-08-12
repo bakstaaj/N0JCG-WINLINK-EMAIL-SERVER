@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+config/appliance.json
+runtime/
+logs/
+

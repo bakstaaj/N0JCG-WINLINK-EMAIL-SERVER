@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "product": "N0JCG-WINLINK",
+  "product_display_name": "N0JCG Winlink Email Server",
+  "host_role": "PI-WINLINK",
+  "platform": {
+    "board": "Raspberry Pi 4 Model B",
+    "architecture": "aarch64",
+    "os_baseline": "Debian 13",
+    "kernel_family": "rpi-v8"
+  },
+  "radio": {
+    "profile_id": null,
+    "transmit_enabled": false,
+    "ptt_max_seconds": 180,
+    "audio_device": null,
+    "serial_device": null,
+    "hidraw_device": null
+  },
+  "packet": {
+    "modem": "direwolf",
+    "mode": "ax25",
+    "kiss_host": "127.0.0.1",
+    "kiss_port": 8001,
+    "agw_host": "127.0.0.1",
+    "agw_port": 8000
+  },
+  "winlink": {
+    "client": "pat",
+    "gateway": null,
+    "auto_connect": false,
+    "telnet_fallback": false
+  },
+  "web": {
+    "bind_address": "127.0.0.1",
+    "operator_port": 8096,
+    "webmail_port": 8097
+  }
+}

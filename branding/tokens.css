@@ -1,0 +1,32 @@
+/* N0JCG Open Radio Platform design tokens v1.0. */
+:root {
+  color-scheme: light;
+  --n0-color-navy: #0a1f44;
+  --n0-color-blue: #1565c0;
+  --n0-color-cyan: #00b8d9;
+  --n0-color-slate: #2b3440;
+  --n0-color-mist: #f4f7fa;
+  --n0-color-white: #ffffff;
+  --n0-color-text: #15202b;
+  --n0-color-text-muted: #536171;
+  --n0-color-border: #c7cdd4;
+  --n0-color-success: #168a4a;
+  --n0-color-warning: #b25e00;
+  --n0-color-danger: #c62828;
+  --n0-color-info: #6d45b8;
+  --n0-font-display: "Orbitron", "Inter", Arial, sans-serif;
+  --n0-font-body: "Inter", "Segoe UI", Arial, sans-serif;
+  --n0-font-mono: "JetBrains Mono", Consolas, monospace;
+  --n0-space-1: 0.25rem;
+  --n0-space-2: 0.5rem;
+  --n0-space-3: 0.75rem;
+  --n0-space-4: 1rem;
+  --n0-space-6: 1.5rem;
+  --n0-space-8: 2rem;
+  --n0-radius-sm: 0.25rem;
+  --n0-radius-md: 0.5rem;
+  --n0-radius-pill: 999px;
+  --n0-shadow-sm: 0 1px 2px rgb(10 31 68 / 12%);
+  --n0-focus-ring: 0 0 0 3px rgb(0 184 217 / 45%);
+}
+

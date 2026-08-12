@@ -1,0 +1,5 @@
+# Operator authentication is enabled by deploy/setup_operator_auth.sh.
+# Keep this file as a reviewable example; it is not a secret.
+auth_basic "N0JCG Winlink Email Server operator console";
+auth_basic_user_file /etc/nginx/.htpasswd-n0jcg-winlink;
+

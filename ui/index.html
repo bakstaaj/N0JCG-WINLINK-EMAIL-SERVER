@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="N0JCG Winlink Email Server operator console">
+  <title>N0JCG Winlink Email Server | Operator console</title>
+  <link rel="stylesheet" href="../branding/tokens.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-lockup" aria-label="N0JCG Winlink Email Server">
+      <img src="../assets/brand/N0JCG_Header_Dark_Approved.png" alt="N0JCG Open Radio Platform" class="brand-mark" width="210" height="40">
+      <span class="product-name">Winlink Email Server</span>
+    </div>
+    <div class="header-context"><span class="eyebrow">Operator console</span><span class="mono">PI-WINLINK</span></div>
+  </header>
+  <main class="shell">
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="eyebrow">N0JCG Open Radio Platform</p><h1 id="page-title">Winlink Email Server status</h1><p class="lede">Configure, monitor, and diagnose the client appliance before connecting the radio.</p></div>
+      <div class="status-badge status-unknown" role="status"><span aria-hidden="true">●</span> RF state: Unknown</div>
+    </section>
+    <section class="grid" aria-label="Client appliance status">
+      <article class="card"><div class="card-heading"><h2>Appliance</h2><span class="status status-ready">Ready</span></div><dl class="facts"><div><dt>Host</dt><dd class="mono">PI-WINLINK</dd></div><div><dt>Product</dt><dd>N0JCG Winlink Email Server</dd></div><div><dt>Transmit policy</dt><dd>Disabled by default</dd></div></dl></article>
+      <article class="card"><div class="card-heading"><h2>DigiRig Mobile</h2><span class="status status-detected">Detected</span></div><dl class="facts"><div><dt>Audio</dt><dd class="mono">USB Audio Device / card 3</dd></div><div><dt>Serial</dt><dd class="mono">/dev/digirig-serial</dd></div><div><dt>PTT interface</dt><dd class="mono">/dev/digirig-ptt</dd></div></dl><p class="muted">USB detection is not proof of PTT or RF operation.</p></article>
+      <article class="card"><div class="card-heading"><h2>Software registration</h2><span class="status status-unavailable">Unregistered</span></div><dl class="facts"><div><dt>Product</dt><dd>N0JCG Winlink Email Server</dd></div><div><dt>Device identity</dt><dd class="mono">Available from registration tools</dd></div><div><dt>Activation</dt><dd>Registration request not created</dd></div></dl><p class="muted">Registration does not enable radio transmission.</p></article>
+      <article class="card"><div class="card-heading"><h2>Winlink client</h2><span class="status status-unavailable">Unavailable</span></div><dl class="facts"><div><dt>Pat</dt><dd>Installed; service inactive</dd></div><div><dt>Dire Wolf</dt><dd>Installed; service inactive</dd></div><div><dt>Packet RMS gateway</dt><dd>Not configured</dd></div></dl></article>
+    </section>
+    <section class="card next-step"><div><p class="eyebrow">Next safe step</p><h2>Complete pre-radio validation</h2><p>Run software, audio, and configuration checks without enabling transmission.</p></div><a class="button" href="#diagnostics">Open diagnostics</a></section>
+    <section id="diagnostics" class="card"><div class="card-heading"><h2>Diagnostics</h2><span class="status status-unknown">Awaiting test</span></div><ul class="checklist"><li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>USB audio, serial, and HID interfaces observed.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf configuration and local interface test pending.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Pat mailbox and Telnet/CMS test pending.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Unavailable until the radio is connected.</small></span></li></ul></section>
+  </main>
+  <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> N0JCG Open Radio Platform</footer>
+</body>
+</html>
