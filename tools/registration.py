@@ -18,6 +18,7 @@ from pathlib import Path
 
 
 PRODUCT_ID = "N0JCG-WINLINK-EMAIL-SERVER"
+PRODUCT_SLUG = "winlink-email-appliance"
 PRODUCT_NAME = "N0JCG Winlink Email Server"
 DEFAULT_STATE = Path(os.environ.get("N0JCG_REGISTRATION_STATE", "/var/lib/n0jcg-winlink/registration.json"))
 
@@ -46,6 +47,7 @@ def load_state(path: Path, current_device_id: str) -> dict:
     else:
         data = {
             "schema_version": 1,
+            "product_slug": PRODUCT_SLUG,
             "product_id": PRODUCT_ID,
             "product_display_name": PRODUCT_NAME,
             "registration_status": "unregistered",
@@ -92,6 +94,7 @@ def main() -> int:
 
     request_data = {
         "schema_version": 1,
+        "product_slug": PRODUCT_SLUG,
         "product_id": PRODUCT_ID,
         "product_display_name": PRODUCT_NAME,
         "device_id": current_device_id,
@@ -113,4 +116,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

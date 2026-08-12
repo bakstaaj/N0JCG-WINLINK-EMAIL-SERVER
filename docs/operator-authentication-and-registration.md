@@ -17,7 +17,8 @@ The setup requires a non-empty operator username and asks for the password twice
 without echoing it. A mismatch stops the setup without changing the account. On
 later upgrades, the installer detects the existing password file and preserves
 the current operator account. To intentionally replace it, run
-`sudo /opt/n0jcg-winlink/tools/setup_operator_auth.sh`.
+`sudo /opt/n0jcg-winlink/tools/install_static_ui.sh --configure-operator-auth`
+or run the setup helper directly.
 
 Production deployment must complete this first-install setup before exposing
 operator controls beyond the trusted setup network.
@@ -26,7 +27,10 @@ The initial protection boundary covers `/ui/`. Future configuration, diagnostics
 
 ## Registration flow
 
-The appliance-side registration foundation uses a stable product-scoped device identifier derived from the Pi machine ID. It does not expose the machine ID itself. The current flow is:
+The appliance-side registration foundation uses the product slug
+`winlink-email-appliance` and a stable product-scoped device identifier derived
+from the Pi machine ID. It does not expose the machine ID itself. The current
+flow is:
 
 1. Display `Unregistered` in the operator console.
 2. Run `python3 tools/registration.py id` to obtain the product device ID.

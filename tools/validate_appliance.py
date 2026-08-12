@@ -67,6 +67,10 @@ def main() -> int:
             if "N0JCG Winlink Email Server" not in content:
                 failures.append(f"missing visible product name: {path.relative_to(ROOT)}")
 
+    registration_example = json.loads((ROOT / "config/registration.example.json").read_text(encoding="utf-8"))
+    if registration_example.get("product_slug") != "winlink-email-appliance":
+        failures.append("registration product_slug must be winlink-email-appliance")
+
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")

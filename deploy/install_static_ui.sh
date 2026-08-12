@@ -6,6 +6,14 @@ INSTALL_ROOT="${INSTALL_ROOT:-/var/www/n0jcg-winlink}"
 APP_ROOT="${APP_ROOT:-/opt/n0jcg-winlink}"
 NGINX_SITE="/etc/nginx/sites-available/n0jcg-winlink.conf"
 NGINX_ENABLED="/etc/nginx/sites-enabled/n0jcg-winlink.conf"
+CONFIGURE_OPERATOR_AUTH=0
+
+if [[ "${1:-}" == "--configure-operator-auth" ]]; then
+    CONFIGURE_OPERATOR_AUTH=1
+elif [[ -n "${1:-}" && "${1:-}" != "--check-only" ]]; then
+    echo "FAIL: unknown option: $1" >&2
+    exit 1
+fi
 
 if [[ ! -f "$REPO_ROOT/ui/index.html" || ! -f "$REPO_ROOT/branding/tokens.css" ]]; then
     echo "FAIL: run this installer from the N0JCG-WINLINK-EMAIL-SERVER source tree" >&2
@@ -40,7 +48,7 @@ sudo ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
 sudo nginx -t
 sudo systemctl reload nginx
 
-if [[ ! -f /etc/nginx/.htpasswd-n0jcg-winlink ]]; then
+if [[ ! -f /etc/nginx/.htpasswd-n0jcg-winlink || "$CONFIGURE_OPERATOR_AUTH" == "1" ]]; then
     if ! command -v htpasswd >/dev/null 2>&1; then
         echo "Installing the password utility required for operator authentication."
         sudo apt-get update
