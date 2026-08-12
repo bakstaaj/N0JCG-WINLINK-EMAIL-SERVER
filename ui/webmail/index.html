@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="N0JCG Winlink Email Server webmail">
+  <title>N0JCG Winlink Email Server | Webmail</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    .mail-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:var(--n0-space-6); }
+    .mail-nav { display:grid; align-content:start; gap:var(--n0-space-2); }
+    .mail-nav button, .mail-toolbar button { border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); padding:10px 12px; color:var(--n0-color-navy); background:var(--n0-color-white); text-align:left; font:inherit; cursor:pointer; }
+    .mail-nav button.active, .mail-nav button:hover, .mail-toolbar button:hover { color:var(--n0-color-white); background:var(--n0-color-blue); }
+    .mail-panel { min-width:0; }
+    .mail-toolbar { display:flex; justify-content:space-between; align-items:center; gap:var(--n0-space-3); margin-bottom:var(--n0-space-4); }
+    .mail-toolbar button { text-align:center; }
+    .mail-table { width:100%; border-collapse:collapse; }
+    .mail-table th, .mail-table td { padding:12px 10px; border-bottom:1px solid #e9edf2; text-align:left; vertical-align:top; }
+    .mail-table th { color:var(--n0-color-text-muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; }
+    .mail-table td { color:var(--n0-color-text); }
+    .mail-empty { padding:var(--n0-space-8); border:1px dashed var(--n0-color-border); border-radius:var(--n0-radius-md); color:var(--n0-color-text-muted); text-align:center; }
+    .compose { display:grid; gap:var(--n0-space-4); }
+    .compose label { display:grid; gap:var(--n0-space-2); color:var(--n0-color-text-muted); font-size:.85rem; font-weight:700; }
+    .compose input, .compose textarea { width:100%; padding:11px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
+    .compose textarea { min-height:220px; resize:vertical; }
+    .compose-actions { display:flex; flex-wrap:wrap; gap:var(--n0-space-3); }
+    .compose-actions button { border:0; border-radius:var(--n0-radius-sm); padding:11px 16px; color:var(--n0-color-white); background:var(--n0-color-blue); font-weight:700; cursor:pointer; }
+    .compose-actions button.secondary { color:var(--n0-color-navy); background:var(--n0-color-mist); border:1px solid var(--n0-color-border); }
+    @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(4,1fr); } .mail-nav button { text-align:center; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-lockup"><img src="../assets/brand/N0JCG_Header_Dark_Approved.png" alt="N0JCG Open Radio Platform" class="brand-mark" width="210" height="40"><span class="product-name">Winlink Email Server</span></div>
+    <div class="header-context"><a class="header-link" href="../ui/">Operator console</a><span class="mono">PI-WINLINK</span></div>
+  </header>
+  <main class="shell">
+    <section class="intro" aria-labelledby="mail-title">
+      <div><p class="eyebrow">N0JCG Open Radio Platform</p><h1 id="mail-title">Webmail</h1><p class="lede">Compose and manage Winlink messages through the client appliance mailbox.</p></div>
+      <div class="status-badge status-unavailable" role="status"><span aria-hidden="true">!</span> Mailbox: Not connected</div>
+    </section>
+    <section class="mail-layout" aria-label="Webmail workspace">
+      <nav class="mail-nav" aria-label="Mailbox folders">
+        <button class="active" data-folder="inbox">Inbox <span aria-label="0 messages">0</span></button>
+        <button data-folder="sent">Sent</button>
+        <button data-folder="drafts">Drafts</button>
+        <button data-folder="queue">Send queue</button>
+        <button data-action="compose">Compose</button>
+      </nav>
+      <section class="card mail-panel" aria-live="polite">
+        <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="refresh">Refresh</button> <button type="button" data-action="compose">New message</button></div></div>
+        <div id="folder-view" class="mail-empty"><strong>No mailbox connection</strong><p>Pat is installed but not connected to a Winlink mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.</p></div>
+        <form id="compose-view" class="compose" hidden>
+          <label>To<input name="to" type="email" autocomplete="email" placeholder="recipient@example.net" required></label>
+          <label>Subject<input name="subject" maxlength="160" required></label>
+          <label>Message<textarea name="body" maxlength="10000" required></textarea></label>
+          <label>Attachment<input name="attachment" type="file"></label>
+          <p class="muted">Sending remains disabled until the Pat mailbox and Packet RMS path are verified.</p>
+          <div class="compose-actions"><button type="submit">Queue message</button><button type="button" class="secondary" data-action="save-draft">Save draft</button><button type="button" class="secondary" data-action="cancel-compose">Cancel</button></div>
+        </form>
+      </section>
+    </section>
+  </main>
+  <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> Client-side appliance, not an RMS gateway</footer>
+  <script src="webmail.js"></script>
+</body>
+</html>

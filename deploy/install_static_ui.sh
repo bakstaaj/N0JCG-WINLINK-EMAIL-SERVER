@@ -24,16 +24,20 @@ fi
 if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/ui/index.html"
     test -f "$REPO_ROOT/ui/styles.css"
+    test -f "$REPO_ROOT/ui/webmail/index.html"
+    test -f "$REPO_ROOT/ui/webmail/webmail.js"
     test -f "$REPO_ROOT/branding/tokens.css"
     test -f "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg"
     echo "PASS: static UI source and brand assets are present"
     exit 0
 fi
 
-sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
+sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
 sudo install -d -m 0755 "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/ui/styles.css"
+sudo install -m 0644 "$REPO_ROOT/ui/webmail/index.html" "$INSTALL_ROOT/webmail/index.html"
+sudo install -m 0644 "$REPO_ROOT/ui/webmail/webmail.js" "$INSTALL_ROOT/webmail/webmail.js"
 sudo install -m 0644 "$REPO_ROOT/branding/tokens.css" "$INSTALL_ROOT/branding/tokens.css"
 sudo install -m 0644 "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg" "$INSTALL_ROOT/assets/brand/n0jcg-primary-light.svg"
 sudo install -m 0644 "$REPO_ROOT/assets/brand/N0JCG_Header_Dark_Approved.png" "$INSTALL_ROOT/assets/brand/N0JCG_Header_Dark_Approved.png"

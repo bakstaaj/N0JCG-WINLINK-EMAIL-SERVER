@@ -31,6 +31,13 @@
     "auto_connect": false,
     "telnet_fallback": false
   },
+  "email": {
+    "mailbox_backend": "pat",
+    "webmail_path": "/webmail/",
+    "api_base": "/api/v1",
+    "send_enabled": false,
+    "offline_queue": true
+  },
   "web": {
     "bind_address": "127.0.0.1",
     "operator_port": 8096,

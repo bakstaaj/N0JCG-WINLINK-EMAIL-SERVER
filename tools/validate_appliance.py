@@ -48,6 +48,8 @@ def main() -> int:
         ROOT / "branding/N0JCG_Winlink_Email_Server_Product_Brief.md",
         ROOT / "ui/index.html",
         ROOT / "ui/styles.css",
+        ROOT / "ui/webmail/index.html",
+        ROOT / "ui/webmail/webmail.js",
         ROOT / "config/registration.example.json",
         ROOT / "tools/registration.py",
         ROOT / "deploy/setup_operator_auth.sh",
