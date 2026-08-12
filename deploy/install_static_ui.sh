@@ -7,6 +7,12 @@ APP_ROOT="${APP_ROOT:-/opt/n0jcg-winlink}"
 NGINX_SITE="/etc/nginx/sites-available/n0jcg-winlink.conf"
 NGINX_ENABLED="/etc/nginx/sites-enabled/n0jcg-winlink.conf"
 
+if [[ ! -f "$REPO_ROOT/ui/index.html" || ! -f "$REPO_ROOT/branding/tokens.css" ]]; then
+    echo "FAIL: run this installer from the N0JCG-WINLINK-EMAIL-SERVER source tree" >&2
+    echo "      expected: $REPO_ROOT/ui/index.html" >&2
+    exit 1
+fi
+
 if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/ui/index.html"
     test -f "$REPO_ROOT/ui/styles.css"
