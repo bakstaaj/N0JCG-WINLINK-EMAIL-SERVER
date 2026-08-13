@@ -24,7 +24,7 @@ if [[ -n "$AUTH_OPTION" && "$AUTH_OPTION" != "--configure-operator-auth" ]]; the
     exit 1
 fi
 
-for required in ui branding assets config deploy tools; do
+for required in ui branding assets config deploy tools api; do
     test -d "$REPO_ROOT/$required" || {
         echo "FAIL: missing source directory: $required" >&2
         exit 1
@@ -39,6 +39,7 @@ scp -r \
     "$REPO_ROOT/config" \
     "$REPO_ROOT/deploy" \
     "$REPO_ROOT/tools" \
+    "$REPO_ROOT/api" \
     "$REMOTE_HOST:$REMOTE_ROOT/"
 
 ssh -tt "$REMOTE_HOST" "sudo bash '$REMOTE_ROOT/deploy/install_static_ui.sh' '$AUTH_OPTION'"
