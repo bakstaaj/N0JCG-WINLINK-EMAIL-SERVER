@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     .mail-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:var(--n0-space-6); }
+    #mail-workspace[hidden] { display:none !important; }
     .mail-nav { display:grid; align-content:start; gap:var(--n0-space-2); }
     .mail-nav button, .mail-toolbar button { border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); padding:10px 12px; color:var(--n0-color-navy); background:var(--n0-color-white); text-align:left; font:inherit; cursor:pointer; }
     .mail-nav button.active, .mail-nav button:hover, .mail-toolbar button:hover { color:var(--n0-color-white); background:var(--n0-color-blue); }
