@@ -9,6 +9,7 @@
   const authGate = document.getElementById('auth-gate');
   const workspace = document.getElementById('mail-workspace');
   const mailUser = document.getElementById('mail-user');
+  const logoutButton = document.getElementById('logout-button');
   const emptyCopy = {
     inbox: ['No mailbox connection', 'Pat is installed but not connected to a Winlink mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
     sent: ['No sent messages', 'Sent message history will appear here after the Pat mailbox is connected.'],
@@ -64,6 +65,19 @@
     document.title = `N0JCG Winlink Email Server | Webmail - ${safeCallsign}`;
   }
 
+  async function logout() {
+    logoutButton.disabled = true;
+    try { await fetch('/api/v1/auth/logout', { method: 'POST' }); } finally {
+      signature = '';
+      mailUser.textContent = '';
+      document.title = 'N0JCG Winlink Email Server | Webmail';
+      workspace.hidden = true;
+      authGate.hidden = false;
+      document.getElementById('login-form').reset();
+      logoutButton.disabled = false;
+    }
+  }
+
   async function loadSignature() {
     const response = await fetch('/api/v1/account/signature', { cache: 'no-store' });
     const body = await response.json().catch(() => ({}));
@@ -97,6 +111,7 @@
   }
 
   document.getElementById('login-form').addEventListener('submit', submitAuth);
+  logoutButton.addEventListener('click', logout);
   document.querySelectorAll('[data-folder]').forEach((button) => button.addEventListener('click', () => showFolder(button.dataset.folder)));
   document.querySelectorAll('[data-action="compose"]').forEach((button) => button.addEventListener('click', showCompose));
   document.querySelector('[data-action="signature"]').addEventListener('click', showSignature);

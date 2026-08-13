@@ -14,7 +14,7 @@
       <img src="../assets/brand/N0JCG_Header_Dark_Approved.png" alt="N0JCG Open Radio Platform" class="brand-mark" width="210" height="40">
       <span class="product-name">Winlink Email Server</span>
     </div>
-    <div class="header-context"><a class="header-link" href="../webmail/">Webmail</a><span class="eyebrow">Operator console</span><span class="mono">PI-WINLINK</span></div>
+    <div class="header-context"><a class="header-link" href="../webmail/">Webmail</a><span class="eyebrow">Operator console</span><span class="mono">PI-WINLINK</span><button class="header-button" id="logout-button" type="button">Log out</button></div>
   </header>
   <main class="shell">
     <section class="intro" aria-labelledby="page-title">
@@ -31,5 +31,12 @@
     <section id="diagnostics" class="card"><div class="card-heading"><h2>Diagnostics</h2><span class="status status-unknown">Awaiting test</span></div><ul class="checklist"><li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>USB audio, serial, and HID interfaces observed.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf configuration and local interface test pending.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Pat mailbox and Telnet/CMS test pending.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Unavailable until the radio is connected.</small></span></li></ul></section>
   </main>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> N0JCG Open Radio Platform</footer>
+  <script>
+    document.getElementById('logout-button').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try { await fetch('../api/v1/auth/logout', { method: 'POST' }); } finally { window.location.reload(); }
+    });
+  </script>
 </body>
 </html>
