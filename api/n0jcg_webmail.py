@@ -263,6 +263,10 @@ def session_from(handler):
         return {**session, "token": token.value}
 
 
+def session_view(session):
+    return {"authenticated": True, "email": session["email"], "callsign": session["callsign"], "source": "pat", "expires_at": int(session["last_seen"] + SESSION_IDLE)}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "N0JCG-Webmail/0.1"
 
@@ -300,7 +304,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 remember_account(email, callsign)
                 token = create_session(email, callsign, password)
-                self.send_json(HTTPStatus.OK, {"authenticated": True, "email": email, "callsign": callsign, "source": "pat", "evidence": evidence}, f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_IDLE}")
+                self.send_json(HTTPStatus.OK, {**session_view({"email": email, "callsign": callsign, "last_seen": time.time()}), "evidence": evidence}, f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_IDLE}")
                 return
             if self.path == "/api/v1/auth/register":
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "separate webmail registration is not used; sign in with Winlink"})
@@ -397,7 +401,7 @@ class Handler(BaseHTTPRequestHandler):
             if not session:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"authenticated": False})
             else:
-                self.send_json(HTTPStatus.OK, {"authenticated": True, "email": session["email"], "callsign": session["callsign"], "source": "pat"})
+                self.send_json(HTTPStatus.OK, session_view(session))
             return
         if self.path == "/api/v1/mail/status":
             if not session:

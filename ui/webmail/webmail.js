@@ -10,6 +10,7 @@
   const workspace = document.getElementById('mail-workspace');
   const mailUser = document.getElementById('mail-user');
   const logoutButton = document.getElementById('logout-button');
+  let sessionTimer;
   const emptyCopy = {
     inbox: ['No mailbox connection', 'Pat is installed but not connected to a Winlink mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
     sent: ['No sent messages', 'Sent message history will appear here after the Pat mailbox is connected.'],
@@ -223,6 +224,7 @@
       authGate.hidden = false;
       document.getElementById('login-form').reset();
       logoutButton.disabled = false;
+      if (sessionTimer) window.clearTimeout(sessionTimer);
     }
   }
 
@@ -248,6 +250,7 @@
       authGate.hidden = true;
       workspace.hidden = false;
       showSignedInUser(body.callsign);
+      scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
       document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
       refreshFolderCounts();
@@ -266,12 +269,31 @@
       authGate.hidden = true;
       workspace.hidden = false;
       showSignedInUser(body.callsign);
+      scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
       document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
       refreshFolderCounts();
     } catch (_) {
       // The login form remains available when the session endpoint is offline.
     }
+  }
+
+  function scheduleSessionCheck(expiresAt) {
+    if (sessionTimer) window.clearTimeout(sessionTimer);
+    const delay = Math.max(1000, (Number(expiresAt || 0) * 1000) - Date.now() + 1000);
+    sessionTimer = window.setTimeout(async () => {
+      try {
+        const response = await fetch('/api/v1/auth/session', { cache: 'no-store' });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.authenticated) {
+          workspace.hidden = true;
+          authGate.hidden = false;
+          authMessage(document.getElementById('login-form'), 'Your Webmail session expired. Please sign in again.');
+          return;
+        }
+        scheduleSessionCheck(body.expires_at);
+      } catch (_) { scheduleSessionCheck(Date.now() / 1000 + 60); }
+    }, delay);
   }
 
   document.getElementById('login-form').addEventListener('submit', submitAuth);
