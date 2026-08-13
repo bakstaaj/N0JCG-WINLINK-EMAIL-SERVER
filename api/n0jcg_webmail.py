@@ -154,7 +154,7 @@ def pat_validate(callsign, password):
             config.unlink(missing_ok=True)
 
 
-def pat_mailbox_request(session, box, mid=None):
+def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
     """Ask a short-lived Pat HTTP process to decode mailbox messages."""
     config = None
     process = None
@@ -179,14 +179,21 @@ def pat_mailbox_request(session, box, mid=None):
         endpoint = f"http://127.0.0.1:{port}/api/mailbox/{box}"
         if mid:
             endpoint += f"/{mid}"
+        request = urllib.request.Request(endpoint, method=method)
+        if payload is not None:
+            request.data = json.dumps(payload).encode("utf-8")
+            request.add_header("Content-Type", "application/json")
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 error = (process.stderr.read() if process.stderr else "").strip().splitlines()
                 raise RuntimeError(error[-1] if error else "Pat mailbox service stopped unexpectedly.")
             try:
-                with urllib.request.urlopen(endpoint, timeout=1) as response:
-                    return json.loads(response.read().decode("utf-8"))
+                with urllib.request.urlopen(request, timeout=1) as response:
+                    body = response.read().decode("utf-8")
+                    return json.loads(body) if body else {}
+            except urllib.error.HTTPError as exc:
+                raise RuntimeError(f"Pat mailbox request failed ({exc.code}).") from exc
             except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError):
                 time.sleep(0.1)
         raise RuntimeError("Pat mailbox API timed out.")
@@ -280,6 +287,26 @@ class Handler(BaseHTTPRequestHandler):
                         SESSIONS.pop(session["token"], None)
                 self.send_json(HTTPStatus.OK, {"authenticated": False}, "n0jcg_webmail_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
                 return
+            if self.path.startswith("/api/v1/mail/messages/") and self.path.endswith("/read"):
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                parts = self.path.split("/")
+                if len(parts) != 7 or not re.fullmatch(r"[A-Za-z0-9._-]+", parts[5]):
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid message id"})
+                    return
+                folder = str(data.get("folder") or "inbox")
+                box = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}.get(folder)
+                if not box:
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": "unknown mailbox folder"})
+                    return
+                try:
+                    pat_mailbox_request(session, box, parts[5], "POST", {"Read": True})
+                    self.send_json(HTTPStatus.OK, {"source": "pat", "state": "READY", "read": True})
+                except RuntimeError as exc:
+                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "source": "pat"})
+                return
             if self.path == "/api/v1/account/signature":
                 session = session_from(self)
                 if not session:
@@ -345,6 +372,29 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, {"callsign": session["callsign"], "signature": row[0] if row else ""})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def do_DELETE(self):
+        session = session_from(self)
+        prefix = "/api/v1/mail/messages/"
+        if not self.path.startswith(prefix):
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        if not session:
+            self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+            return
+        path, _, query = self.path.partition("?")
+        mid = path[len(prefix):]
+        params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
+        folder = params.get("folder", "inbox")
+        box = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}.get(folder)
+        if not box or not re.fullmatch(r"[A-Za-z0-9._-]+", mid):
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid mailbox message"})
+            return
+        try:
+            pat_mailbox_request(session, box, mid, "DELETE")
+            self.send_json(HTTPStatus.OK, {"source": "pat", "state": "READY", "deleted": True})
+        except RuntimeError as exc:
+            self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "source": "pat"})
 
 
 def main():

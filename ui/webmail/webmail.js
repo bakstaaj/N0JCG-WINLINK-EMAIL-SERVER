@@ -59,8 +59,15 @@
       if (!response.ok) throw new Error(body.error || 'Message unavailable.');
       const message = body.message;
       folderTitle.textContent = message.Subject || '(no subject)';
-      folderView.innerHTML = `<article class="message-detail"><p><strong>From:</strong> ${escapeHtml(JSON.stringify(message.From || ''))}</p><p><strong>Date:</strong> ${escapeHtml(message.Date || '')}</p><pre>${escapeHtml(message.Body || '')}</pre><button type="button" data-action="back-inbox">Back to ${escapeHtml(folder)}</button></article>`;
+      folderView.innerHTML = `<article class="message-detail"><p><strong>From:</strong> ${escapeHtml(JSON.stringify(message.From || ''))}</p><p><strong>Date:</strong> ${escapeHtml(message.Date || '')}</p><pre>${escapeHtml(message.Body || '')}</pre><div class="message-actions"><button type="button" data-action="back-inbox">Back to ${escapeHtml(folder)}</button><button type="button" class="danger" data-action="delete-message">Delete</button></div></article>`;
       folderView.querySelector('[data-action="back-inbox"]').addEventListener('click', () => showFolder(folder));
+      folderView.querySelector('[data-action="delete-message"]').addEventListener('click', async () => {
+        if (!window.confirm('Delete this message?')) return;
+        const response = await fetch(`/api/v1/mail/messages/${encodeURIComponent(mid)}?folder=${encodeURIComponent(folder)}`, { method: 'DELETE' });
+        if (!response.ok) { window.alert('The message could not be deleted.'); return; }
+        showFolder(folder);
+      });
+      await fetch(`/api/v1/mail/messages/${encodeURIComponent(mid)}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder }) });
     } catch (error) {
       folderView.innerHTML = `<strong>Message unavailable</strong><p>${error.message}</p>`;
     }
