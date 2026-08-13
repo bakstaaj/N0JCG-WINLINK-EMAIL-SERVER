@@ -64,6 +64,14 @@
     document.title = `N0JCG Winlink Email Server | Webmail - ${safeCallsign}`;
   }
 
+  async function loadSignature() {
+    const response = await fetch('/api/v1/account/signature', { cache: 'no-store' });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Signature unavailable.');
+    signature = body.signature || '';
+    return signature;
+  }
+
   async function submitAuth(event) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -78,7 +86,7 @@
       authGate.hidden = true;
       workspace.hidden = false;
       showSignedInUser(body.callsign);
-      signature = '';
+      try { await loadSignature(); } catch (_) { signature = ''; }
       document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
       showFolder('inbox');
     } catch (error) {
@@ -101,10 +109,14 @@
     event.preventDefault();
     const message = signatureForm.querySelector('.auth-message');
     const nextSignature = signatureForm.querySelector('textarea').value;
-    const response = await fetch('/api/v1/account/signature', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signature: nextSignature }) });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) { message.textContent = body.error || 'Signature could not be saved.'; return; }
-    signature = body.signature || '';
-    message.textContent = 'Signature saved.';
+    try {
+      const response = await fetch('/api/v1/account/signature', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signature: nextSignature }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Signature could not be saved.');
+      signature = body.signature || '';
+      message.textContent = 'Signature saved.';
+    } catch (error) {
+      message.textContent = error.message;
+    }
   });
 })();
