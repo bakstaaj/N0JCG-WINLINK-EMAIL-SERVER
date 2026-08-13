@@ -4,4 +4,6 @@ __pycache__/
 config/appliance.json
 runtime/
 logs/
-
+.env
+.env.*
+!.env.example

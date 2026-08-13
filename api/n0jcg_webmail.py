@@ -29,8 +29,10 @@ HOST = os.environ.get("N0JCG_WEBMAIL_HOST", "127.0.0.1")
 PORT = int(os.environ.get("N0JCG_WEBMAIL_PORT", "8097"))
 PAT_BIN = os.environ.get("N0JCG_PAT_BIN", "pat-winlink")
 PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "45"))
+PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://cms.winlink.org:8772/wl2k")
 SESSION_IDLE = int(os.environ.get("N0JCG_SESSION_IDLE_SECONDS", "1800"))
 STATE_DIR = Path(os.environ.get("N0JCG_WEBMAIL_STATE_DIR", "/var/lib/n0jcg-winlink-webmail"))
+PAT_BASE_CONFIG = os.environ.get("N0JCG_PAT_BASE_CONFIG", "")
 DB_PATH = STATE_DIR / "webmail.sqlite3"
 EMAIL_RE = re.compile(r"^([A-Z0-9][A-Z0-9-]{2,15})@winlink\.org$", re.I)
 FAILURE_RE = re.compile(r"secure login failed|authentication failed|login failed|invalid password|unknown callsign", re.I)
@@ -60,6 +62,50 @@ def init_db():
     os.chmod(DB_PATH, 0o600)
 
 
+def pat_config_path():
+    """Find Pat's installed config without requiring a second copy of it."""
+    candidates = []
+    if PAT_BASE_CONFIG:
+        candidates.append(Path(PAT_BASE_CONFIG).expanduser())
+    home = Path.home()
+    candidates.extend((home / ".config" / "pat" / "config.json", home / ".wl2k" / "config.json"))
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def write_pat_config(callsign, password, destination):
+    """Copy Pat's transport settings and override only account credentials."""
+    source = pat_config_path()
+    config = {}
+    if source:
+        try:
+            with source.open("r", encoding="utf-8") as handle:
+                config = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Pat configuration could not be read: {exc}") from exc
+    if not isinstance(config, dict):
+        raise RuntimeError("Pat configuration is not a JSON object")
+    if "telnet" not in config:
+        raise RuntimeError("Pat telnet profile is missing; run Pat configuration once before using webmail")
+    config["mycall"] = callsign
+    config["secure_login_password"] = password
+    with destination.open("w", encoding="utf-8") as handle:
+        json.dump(config, handle)
+        handle.write("\n")
+
+
+def pat_failure_detail(output, returncode, password):
+    """Expose useful Pat diagnostics without returning submitted secrets."""
+    safe = output.replace(password, "[REDACTED]") if password else output
+    lines = [line.strip() for line in safe.splitlines() if line.strip()]
+    detail = " | ".join(lines[-3:])
+    if len(detail) > 600:
+        detail = detail[-600:]
+    return f"Pat authentication failed (exit {returncode})." + (f" {detail}" if detail else "")
+
+
 def pat_validate(callsign, password):
     """Perform a real CMS/Telnet login using Pat and return evidence."""
     config = None
@@ -69,13 +115,15 @@ def pat_validate(callsign, password):
         os.chmod(mailbox_dir, 0o700)
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="n0jcg-pat-", suffix=".json", delete=False) as handle:
             config = Path(handle.name)
-            json.dump({"mycall": callsign, "secure_login_password": password}, handle)
-            handle.write("\n")
+        write_pat_config(callsign, password, config)
         os.chmod(config, 0o600)
         # Pat v0.16 accepts --mycall as a global option. Pass it explicitly so
         # authentication cannot depend on whether a temporary config file was
         # discovered before the connect command is parsed.
-        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", "telnet"]
+        # Use the canonical CMS URL directly. A locally customized `telnet`
+        # alias may point to an executable or stale label; that caused Pat's
+        # Exit 126 here before the Winlink server was contacted.
+        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", PAT_TELNET_URL]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
         except FileNotFoundError:
@@ -88,12 +136,14 @@ def pat_validate(callsign, password):
         if FAILURE_RE.search(output):
             return False, "Winlink rejected the secure-login credentials."
         if result.returncode != 0:
-            return False, "Pat could not complete Winlink authentication."
+            return False, pat_failure_detail(output, result.returncode, password)
         if not SUCCESS_RE.search(output):
-            return False, "Pat did not provide usable Winlink authentication evidence."
+            return False, "Pat returned no recognizable Winlink authentication evidence."
         return True, "Winlink CMS authentication succeeded; isolated Pat mailbox initialized."
     except subprocess.TimeoutExpired:
         return False, "Winlink authentication timed out."
+    except RuntimeError as exc:
+        return False, str(exc)
     finally:
         if config:
             config.unlink(missing_ok=True)

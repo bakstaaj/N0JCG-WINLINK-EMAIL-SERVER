@@ -59,7 +59,13 @@ sudo ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
 sudo nginx -t
 sudo systemctl reload nginx
 sudo systemctl daemon-reload
-sudo systemctl enable --now n0jcg-webmail.service
+sudo systemctl enable n0jcg-webmail.service
+sudo systemctl restart n0jcg-webmail.service
+if ! grep -q 'PAT_TELNET_URL' "$APP_ROOT/api/n0jcg_webmail.py"; then
+    echo "FAIL: installed webmail API is missing the current Pat authentication revision" >&2
+    exit 1
+fi
+echo "PASS: webmail service restarted with current API revision"
 
 if [[ ! -f /etc/nginx/.htpasswd-n0jcg-winlink || "$CONFIGURE_OPERATOR_AUTH" == "1" ]]; then
     if ! command -v htpasswd >/dev/null 2>&1; then

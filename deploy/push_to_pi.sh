@@ -51,3 +51,4 @@ sshpass -e scp -o StrictHostKeyChecking=accept-new -r \
     "$REPO_ROOT/api" "$REMOTE_HOST:$REMOTE_ROOT/"
 
 sshpass -e ssh -tt -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "sudo bash '$REMOTE_ROOT/deploy/install_static_ui.sh' $AUTH_OPTION"
+sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "grep -q PAT_TELNET_URL /opt/n0jcg-winlink/api/n0jcg_webmail.py && systemctl is-active --quiet n0jcg-webmail.service && echo 'PASS: deployed API and active service verified'"
