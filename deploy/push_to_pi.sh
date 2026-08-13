@@ -30,7 +30,6 @@ if [[ -z "${N0JCG_PI_PASSWORD:-}" ]]; then
     echo
 fi
 export SSHPASS="$N0JCG_PI_PASSWORD"
-unset N0JCG_PI_PASSWORD
 
 if [[ -n "$AUTH_OPTION" && "$AUTH_OPTION" != "--configure-operator-auth" ]]; then
     echo "FAIL: supported optional flag is --configure-operator-auth" >&2
@@ -52,3 +51,4 @@ sshpass -e scp -o StrictHostKeyChecking=accept-new -r \
 
 printf '%s\n' "$N0JCG_PI_PASSWORD" | sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "sudo -S -p '' bash '$REMOTE_ROOT/deploy/install_static_ui.sh' $AUTH_OPTION"
 sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "grep -q PAT_TELNET_URL /opt/n0jcg-winlink/api/n0jcg_webmail.py && systemctl is-active --quiet n0jcg-webmail.service && echo 'PASS: deployed API and active service verified'"
+unset N0JCG_PI_PASSWORD SSHPASS
