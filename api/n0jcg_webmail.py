@@ -63,6 +63,7 @@ def init_db():
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_accounts (email TEXT PRIMARY KEY, callsign TEXT NOT NULL, first_validated_at INTEGER NOT NULL, last_validated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_signatures (callsign TEXT PRIMARY KEY, signature TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL, state TEXT NOT NULL, created_at INTEGER NOT NULL)")
         db.commit()
     os.chmod(DB_PATH, 0o600)
 
@@ -342,6 +343,22 @@ class Handler(BaseHTTPRequestHandler):
                     db.commit()
                 self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "saved": True, "draft": {"id": int(draft_id), "recipient": recipient, "subject": subject, "body": body, "updated_at": now}})
                 return
+            if self.path == "/api/v1/mail/queue":
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                recipient = str(data.get("recipient") or "").strip()
+                subject = str(data.get("subject") or "").strip()
+                body = str(data.get("body") or "")
+                if not recipient or len(recipient) > 320 or len(subject) > 160 or not body or len(body) > 10000:
+                    raise ValueError("recipient, subject, and message body are required")
+                now = int(time.time())
+                with sqlite3.connect(DB_PATH) as db:
+                    cursor = db.execute("INSERT INTO mailbox_queue(callsign,recipient,subject,body,state,created_at) VALUES(?,?,?,?,?,?)", (session["callsign"], recipient, subject, body, "QUEUED", now))
+                    db.commit()
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "QUEUED", "queued": True, "id": int(cursor.lastrowid), "created_at": now})
+                return
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ValueError as exc:
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -400,6 +417,14 @@ class Handler(BaseHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as db:
                 rows = db.execute("SELECT id,recipient,subject,body,updated_at FROM mailbox_drafts WHERE callsign=? ORDER BY updated_at DESC", (session["callsign"],)).fetchall()
             self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "drafts": [{"id": row[0], "recipient": row[1], "subject": row[2], "body": row[3], "updated_at": row[4]} for row in rows]})
+            return
+        if self.path == "/api/v1/mail/queue":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                rows = db.execute("SELECT id,recipient,subject,state,created_at FROM mailbox_queue WHERE callsign=? ORDER BY created_at DESC", (session["callsign"],)).fetchall()
+            self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "queue": [{"id": row[0], "recipient": row[1], "subject": row[2], "state": row[3], "created_at": row[4]} for row in rows]})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 

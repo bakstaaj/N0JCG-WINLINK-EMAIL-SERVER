@@ -33,6 +33,17 @@
   }
 
   async function loadMessages(folder) {
+    if (folder === 'queue') {
+      try {
+        const response = await fetch('/api/v1/mail/queue', { cache: 'no-store' });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Send queue is unavailable.');
+        const queue = body.queue || [];
+        folderView.innerHTML = queue.length ? `<div class="message-list">${queue.map((item) => `<div class="message-row"><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.recipient)}</span><time>${escapeHtml(item.state)}</time></div>`).join('')}</div>` : '<strong>Send queue is empty</strong><p>No messages are waiting for a verified Pat/Packet transmission path.</p>';
+        folderTitle.textContent = `Send queue ${queue.length}`;
+      } catch (error) { folderView.innerHTML = `<strong>Queue unavailable</strong><p>${escapeHtml(error.message)}</p>`; }
+      return;
+    }
     if (folder !== 'inbox' && folder !== 'sent' && folder !== 'drafts') return;
     try {
       const response = await fetch(`/api/v1/mail/messages?folder=${encodeURIComponent(folder)}`, { cache: 'no-store' });
@@ -191,7 +202,17 @@
   document.querySelector('[data-action="save-draft"]').addEventListener('click', async () => {
     try { await saveDraft(); } catch (error) { window.alert(error.message); }
   });
-  form.addEventListener('submit', (event) => { event.preventDefault(); window.alert('Message queueing is unavailable until Pat and the Packet RMS path are verified.'); });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(form));
+      const response = await fetch('/api/v1/mail/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Message could not be queued.');
+      window.alert('Message queued locally. Transmission remains disabled until the Pat/Packet path is verified.');
+      showFolder('queue');
+    } catch (error) { window.alert(error.message); }
+  });
   signatureForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const message = signatureForm.querySelector('.auth-message');

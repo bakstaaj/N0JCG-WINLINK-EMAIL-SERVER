@@ -26,6 +26,7 @@ implemented:
 - `POST /api/v1/mail/drafts` — save a draft locally or in the Pat mailbox.
 - `GET /api/v1/mail/drafts` — list drafts for the authenticated Winlink callsign.
 - `POST /api/v1/mail/queue` — validate and queue a message for transmission.
+- `GET /api/v1/mail/queue` — list local queued messages for the authenticated callsign.
 - `POST /api/v1/mail/queue/{id}/cancel` — cancel before modem ownership.
 
 Every response must identify its source (`pat`, `local_queue`, or `unknown`),
