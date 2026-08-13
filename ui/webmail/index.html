@@ -51,11 +51,9 @@
       <div class="status-badge status-unavailable" role="status"><span aria-hidden="true">!</span> Mailbox: Not connected</div>
     </section>
     <section id="auth-gate" class="card auth-gate" aria-labelledby="auth-title">
-      <div class="auth-tabs" role="tablist" aria-label="Webmail account access"><button class="active" type="button" data-auth-tab="login">Sign in</button><button type="button" data-auth-tab="register">Register</button></div>
-      <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in to your Winlink mailbox</h2><p>Use the Winlink radio email address and secure-login password assigned to your account. The appliance will validate them through Pat when the Winlink client path is configured.</p></div>
+      <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in with Winlink</h2><p>Use your Winlink radio email address and secure-login password. A first login initializes an isolated Pat mailbox for that callsign.</p></div>
       <form id="login-form" class="auth-form"><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input name="password" type="password" autocomplete="current-password" required></label><button class="button" type="submit">Sign in</button><p class="auth-message" role="status"></p></form>
-      <form id="register-form" class="auth-form" hidden><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input name="password" type="password" autocomplete="new-password" required></label><label>Confirm Winlink password<input name="password_confirm" type="password" autocomplete="new-password" required></label><label class="consent"><input name="consent" type="checkbox" required> I understand this password is used to validate my Winlink mailbox through Pat and must not be reused for unrelated services.</label><button class="button" type="submit">Register mailbox</button><p class="auth-message" role="status"></p></form>
-      <p class="muted">Radio email ownership is not proven until Pat completes a successful Winlink CMS or Packet transaction. Credentials are not displayed back in the UI.</p>
+      <p class="muted">No separate webmail registration is required. Radio email ownership is proven only after Pat completes a successful Winlink CMS or Packet transaction. Credentials are not displayed back in the UI.</p>
     </section>
     <section id="mail-workspace" class="mail-layout" aria-label="Webmail workspace" hidden>
       <nav class="mail-nav" aria-label="Mailbox folders">

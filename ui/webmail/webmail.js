@@ -32,28 +32,15 @@
     formElement.querySelector('.auth-message').textContent = message;
   }
 
-  function switchAuthTab(tab) {
-    document.querySelectorAll('[data-auth-tab]').forEach((button) => button.classList.toggle('active', button.dataset.authTab === tab));
-    document.getElementById('login-form').hidden = tab !== 'login';
-    document.getElementById('register-form').hidden = tab !== 'register';
-    document.getElementById('auth-title').textContent = tab === 'login' ? 'Sign in to your Winlink mailbox' : 'Register this Winlink mailbox';
-  }
-
-  async function submitAuth(event, endpoint) {
+  async function submitAuth(event) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const data = Object.fromEntries(new FormData(formElement));
-    if (endpoint.endsWith('/register') && data.password !== data.password_confirm) {
-      authMessage(formElement, 'Passwords do not match.');
-      return;
-    }
-    delete data.password_confirm;
-    delete data.consent;
     const button = formElement.querySelector('button[type="submit"]');
     button.disabled = true;
     authMessage(formElement, 'Validating through the Winlink client…');
     try {
-      const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const response = await fetch('/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Mailbox validation is unavailable.');
       authGate.hidden = true;
@@ -67,9 +54,7 @@
     }
   }
 
-  document.querySelectorAll('[data-auth-tab]').forEach((button) => button.addEventListener('click', () => switchAuthTab(button.dataset.authTab)));
-  document.getElementById('login-form').addEventListener('submit', (event) => submitAuth(event, '/api/v1/auth/login'));
-  document.getElementById('register-form').addEventListener('submit', (event) => submitAuth(event, '/api/v1/auth/register'));
+  document.getElementById('login-form').addEventListener('submit', submitAuth);
   document.querySelectorAll('[data-folder]').forEach((button) => button.addEventListener('click', () => showFolder(button.dataset.folder)));
   document.querySelectorAll('[data-action="compose"]').forEach((button) => button.addEventListener('click', showCompose));
   document.querySelector('[data-action="cancel-compose"]').addEventListener('click', () => showFolder('inbox'));

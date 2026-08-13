@@ -63,7 +63,10 @@ def init_db():
 def pat_validate(callsign, password):
     """Perform a real CMS/Telnet login using Pat and return evidence."""
     config = None
+    mailbox_dir = STATE_DIR / "mailbox" / callsign
     try:
+        mailbox_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(mailbox_dir, 0o700)
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="n0jcg-pat-", suffix=".json", delete=False) as handle:
             config = Path(handle.name)
             json.dump({"mycall": callsign, "secure_login_password": password}, handle)
@@ -72,7 +75,7 @@ def pat_validate(callsign, password):
         # Pat v0.16 accepts --mycall as a global option. Pass it explicitly so
         # authentication cannot depend on whether a temporary config file was
         # discovered before the connect command is parsed.
-        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "connect", "telnet"]
+        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", "telnet"]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
         except FileNotFoundError:
@@ -88,7 +91,7 @@ def pat_validate(callsign, password):
             return False, "Pat could not complete Winlink authentication."
         if not SUCCESS_RE.search(output):
             return False, "Pat did not provide usable Winlink authentication evidence."
-        return True, "Winlink CMS authentication succeeded."
+        return True, "Winlink CMS authentication succeeded; isolated Pat mailbox initialized."
     except subprocess.TimeoutExpired:
         return False, "Winlink authentication timed out."
     finally:
@@ -152,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             data = self.read_json()
-            if self.path in ("/api/v1/auth/register", "/api/v1/auth/login"):
+            if self.path == "/api/v1/auth/login":
                 email, callsign = normalize_account(data.get("email"))
                 password = str(data.get("password") or "")
                 if len(password) < 1 or len(password) > 256:
@@ -164,6 +167,9 @@ class Handler(BaseHTTPRequestHandler):
                 remember_account(email, callsign)
                 token = create_session(email, callsign, password)
                 self.send_json(HTTPStatus.OK, {"authenticated": True, "email": email, "callsign": callsign, "source": "pat", "evidence": evidence}, f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_IDLE}")
+                return
+            if self.path == "/api/v1/auth/register":
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "separate webmail registration is not used; sign in with Winlink"})
                 return
             if self.path == "/api/v1/auth/logout":
                 session = session_from(self)
