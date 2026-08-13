@@ -69,7 +69,10 @@ def pat_validate(callsign, password):
             json.dump({"mycall": callsign, "secure_login_password": password}, handle)
             handle.write("\n")
         os.chmod(config, 0o600)
-        command = [PAT_BIN, "--config", str(config), "connect", "telnet"]
+        # Pat v0.16 accepts --mycall as a global option. Pass it explicitly so
+        # authentication cannot depend on whether a temporary config file was
+        # discovered before the connect command is parsed.
+        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "connect", "telnet"]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
         except FileNotFoundError:
