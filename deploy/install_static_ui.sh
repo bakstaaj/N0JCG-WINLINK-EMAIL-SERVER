@@ -36,6 +36,7 @@ sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROO
 sudo install -d -m 0755 "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/ui/styles.css"
+sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/styles.css"
 sudo install -m 0644 "$REPO_ROOT/ui/webmail/index.html" "$INSTALL_ROOT/webmail/index.html"
 sudo install -m 0644 "$REPO_ROOT/ui/webmail/webmail.js" "$INSTALL_ROOT/webmail/webmail.js"
 sudo install -m 0644 "$REPO_ROOT/branding/tokens.css" "$INSTALL_ROOT/branding/tokens.css"
