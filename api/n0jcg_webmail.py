@@ -456,6 +456,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         session = session_from(self)
+        queue_prefix = "/api/v1/mail/queue/"
+        if self.path.startswith(queue_prefix):
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            queue_id = self.path[len(queue_prefix):]
+            if not queue_id.isdigit():
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid queue id"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                cursor = db.execute("DELETE FROM mailbox_queue WHERE id=? AND callsign=? AND state='QUEUED'", (int(queue_id), session["callsign"]))
+                db.commit()
+            if cursor.rowcount == 0:
+                self.send_json(HTTPStatus.CONFLICT, {"error": "queued message not found or no longer cancellable"})
+            else:
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "cancelled": True})
+            return
         draft_prefix = "/api/v1/mail/drafts/"
         if self.path.startswith(draft_prefix):
             if not session:

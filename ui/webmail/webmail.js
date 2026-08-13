@@ -70,8 +70,14 @@
         if (!response.ok) throw new Error(body.error || 'Send queue is unavailable.');
         const queue = body.queue || [];
         setFolderCount('queue', queue.length);
-        folderView.innerHTML = queue.length ? `<div class="message-list">${queue.map((item) => `<div class="message-row"><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.recipient)}</span><time>${escapeHtml(item.state)}</time></div>`).join('')}</div>` : '<strong>Send queue is empty</strong><p>No messages are waiting for a verified Pat/Packet transmission path.</p>';
+        folderView.innerHTML = queue.length ? `<div class="message-list">${queue.map((item) => `<div class="message-row queue-row"><div class="queue-summary"><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.recipient)}</span><time>${escapeHtml(item.state)}</time></div>${item.state === 'QUEUED' ? `<button class="queue-cancel" type="button" data-cancel-queue="${escapeHtml(item.id)}">Cancel</button>` : ''}</div>`).join('')}</div>` : '<strong>Send queue is empty</strong><p>No messages are waiting for a verified Pat/Packet transmission path.</p>';
         folderTitle.textContent = `Send queue ${queue.length}`;
+        folderView.querySelectorAll('[data-cancel-queue]').forEach((button) => button.addEventListener('click', async () => {
+          if (!window.confirm('Cancel this queued message?')) return;
+          const response = await fetch(`/api/v1/mail/queue/${encodeURIComponent(button.dataset.cancelQueue)}`, { method: 'DELETE' });
+          if (!response.ok) { window.alert('The queued message could not be cancelled.'); return; }
+          await loadMessages('queue');
+        }));
       } catch (error) { folderView.innerHTML = `<strong>Queue unavailable</strong><p>${escapeHtml(error.message)}</p>`; }
       return;
     }

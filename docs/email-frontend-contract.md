@@ -28,6 +28,7 @@ implemented:
 - `DELETE /api/v1/mail/drafts/{id}` — delete a local draft owned by the authenticated callsign.
 - `POST /api/v1/mail/queue` — validate and queue a message for transmission.
 - `GET /api/v1/mail/queue` — list local queued messages for the authenticated callsign.
+- `DELETE /api/v1/mail/queue/{id}` — cancel a locally queued message before transmission.
 - `POST /api/v1/mail/queue/{id}/cancel` — cancel before modem ownership.
 
 Every response must identify its source (`pat`, `local_queue`, or `unknown`),
