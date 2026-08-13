@@ -65,8 +65,15 @@ def init_db():
     with sqlite3.connect(DB_PATH) as db:
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_accounts (email TEXT PRIMARY KEY, callsign TEXT NOT NULL, first_validated_at INTEGER NOT NULL, last_validated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_signatures (callsign TEXT PRIMARY KEY, signature TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
-        db.execute("CREATE TABLE IF NOT EXISTS mailbox_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
-        db.execute("CREATE TABLE IF NOT EXISTS mailbox_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL, state TEXT NOT NULL, created_at INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', state TEXT NOT NULL, created_at INTEGER NOT NULL)")
+        for table in ("mailbox_drafts", "mailbox_queue"):
+            for column in ("attachment_name TEXT NOT NULL DEFAULT ''", "attachment_type TEXT NOT NULL DEFAULT ''", "attachment_data BLOB NOT NULL DEFAULT ''"):
+                try:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column}")
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column" not in str(exc).lower():
+                        raise
         db.commit()
     os.chmod(DB_PATH, 0o600)
 
@@ -288,6 +295,22 @@ def clear_login_failures(client_id):
         LOGIN_ATTEMPTS.pop(client_id, None)
 
 
+def parse_attachment(data):
+    attachment = data.get("attachment") or {}
+    if not isinstance(attachment, dict):
+        raise ValueError("invalid attachment")
+    encoded = str(attachment.get("data") or "")
+    if not encoded:
+        return "", "", b""
+    try:
+        content = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ValueError("invalid attachment data") from exc
+    if len(content) > 100 * 1024:
+        raise ValueError("attachment exceeds the 100 KB maximum")
+    return str(attachment.get("name") or "attachment")[:255], str(attachment.get("type") or "application/octet-stream")[:120], content
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "N0JCG-Webmail/0.1"
 
@@ -317,7 +340,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 16384:
+        if length > 180000:
             raise ValueError("request is too large")
         return json.loads(self.rfile.read(length) or b"{}")
 
@@ -395,18 +418,19 @@ class Handler(BaseHTTPRequestHandler):
                 recipient = str(data.get("recipient") or "").strip()
                 subject = str(data.get("subject") or "").strip()
                 body = str(data.get("body") or "")
+                attachment_name, attachment_type, attachment_data = parse_attachment(data)
                 if len(recipient) > 320 or len(subject) > 160 or len(body) > 10000:
                     raise ValueError("draft exceeds an allowed field length")
                 draft_id = data.get("id")
                 now = int(time.time())
                 with sqlite3.connect(DB_PATH) as db:
                     if draft_id:
-                        db.execute("UPDATE mailbox_drafts SET recipient=?,subject=?,body=?,updated_at=? WHERE id=? AND callsign=?", (recipient, subject, body, now, int(draft_id), session["callsign"]))
+                        db.execute("UPDATE mailbox_drafts SET recipient=?,subject=?,body=?,attachment_name=?,attachment_type=?,attachment_data=?,updated_at=? WHERE id=? AND callsign=?", (recipient, subject, body, attachment_name, attachment_type, attachment_data, now, int(draft_id), session["callsign"]))
                     else:
-                        cursor = db.execute("INSERT INTO mailbox_drafts(callsign,recipient,subject,body,updated_at) VALUES(?,?,?,?,?)", (session["callsign"], recipient, subject, body, now))
+                        cursor = db.execute("INSERT INTO mailbox_drafts(callsign,recipient,subject,body,attachment_name,attachment_type,attachment_data,updated_at) VALUES(?,?,?,?,?,?,?,?)", (session["callsign"], recipient, subject, body, attachment_name, attachment_type, attachment_data, now))
                         draft_id = cursor.lastrowid
                     db.commit()
-                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "saved": True, "draft": {"id": int(draft_id), "recipient": recipient, "subject": subject, "body": body, "updated_at": now}})
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "saved": True, "draft": {"id": int(draft_id), "recipient": recipient, "subject": subject, "body": body, "attachment_name": attachment_name, "attachment_type": attachment_type, "attachment_size": len(attachment_data), "updated_at": now}})
                 return
             if self.path == "/api/v1/mail/queue":
                 session = session_from(self)
@@ -416,11 +440,12 @@ class Handler(BaseHTTPRequestHandler):
                 recipient = str(data.get("recipient") or "").strip()
                 subject = str(data.get("subject") or "").strip()
                 body = str(data.get("body") or "")
+                attachment_name, attachment_type, attachment_data = parse_attachment(data)
                 if not recipient or len(recipient) > 320 or len(subject) > 160 or not body or len(body) > 10000:
                     raise ValueError("recipient, subject, and message body are required")
                 now = int(time.time())
                 with sqlite3.connect(DB_PATH) as db:
-                    cursor = db.execute("INSERT INTO mailbox_queue(callsign,recipient,subject,body,state,created_at) VALUES(?,?,?,?,?,?)", (session["callsign"], recipient, subject, body, "QUEUED", now))
+                    cursor = db.execute("INSERT INTO mailbox_queue(callsign,recipient,subject,body,attachment_name,attachment_type,attachment_data,state,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (session["callsign"], recipient, subject, body, attachment_name, attachment_type, attachment_data, "QUEUED", now))
                     db.commit()
                 self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "QUEUED", "queued": True, "id": int(cursor.lastrowid), "created_at": now})
                 return
@@ -483,8 +508,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
                 return
             with sqlite3.connect(DB_PATH) as db:
-                rows = db.execute("SELECT id,recipient,subject,body,updated_at FROM mailbox_drafts WHERE callsign=? ORDER BY updated_at DESC", (session["callsign"],)).fetchall()
-            self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "drafts": [{"id": row[0], "recipient": row[1], "subject": row[2], "body": row[3], "updated_at": row[4]} for row in rows]})
+                rows = db.execute("SELECT id,recipient,subject,body,attachment_name,attachment_type,length(attachment_data),updated_at FROM mailbox_drafts WHERE callsign=? ORDER BY updated_at DESC", (session["callsign"],)).fetchall()
+            self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "drafts": [{"id": row[0], "recipient": row[1], "subject": row[2], "body": row[3], "attachment_name": row[4], "attachment_type": row[5], "attachment_size": row[6] or 0, "updated_at": row[7]} for row in rows]})
             return
         if self.path == "/api/v1/mail/queue":
             if not session:

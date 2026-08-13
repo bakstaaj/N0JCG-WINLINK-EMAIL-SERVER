@@ -164,8 +164,9 @@
   async function saveDraft() {
     if (!validateAttachment()) return;
     const data = Object.fromEntries(new FormData(composeView));
+    const attachment = await readAttachment();
     const draftId = composeView.dataset.draftId;
-    const response = await fetch('/api/v1/mail/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: draftId || undefined, recipient: data.to, subject: data.subject, body: data.body }) });
+    const response = await fetch('/api/v1/mail/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: draftId || undefined, recipient: data.to, subject: data.subject, body: data.body, attachment }) });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || 'Draft could not be saved.');
     window.alert('Draft saved locally.');
@@ -184,6 +185,17 @@
     }
     if (file.size > 10 * 1024) warning.textContent = 'Warning: attachments over 10 KB may be slow over packet radio.';
     return true;
+  }
+
+  function readAttachment() {
+    const file = composeView.querySelector('input[name="attachment"]').files[0];
+    if (!file) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, type: file.type || 'application/octet-stream', data: String(reader.result).split(',', 2)[1] || '' });
+      reader.onerror = () => reject(new Error('Attachment could not be read.'));
+      reader.readAsDataURL(file);
+    });
   }
 
   async function showSignature() {
@@ -313,7 +325,8 @@
     if (!validateAttachment()) return;
     try {
       const data = Object.fromEntries(new FormData(form));
-      const response = await fetch('/api/v1/mail/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body }) });
+      const attachment = await readAttachment();
+      const response = await fetch('/api/v1/mail/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body, attachment }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Message could not be queued.');
       window.alert('Message queued locally. Transmission remains disabled until the Pat/Packet path is verified.');
