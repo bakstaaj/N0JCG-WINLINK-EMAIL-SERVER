@@ -123,7 +123,8 @@ def pat_validate(callsign, password):
         # Use the canonical CMS URL directly. A locally customized `telnet`
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
-        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", PAT_TELNET_URL]
+        telnet_url = PAT_TELNET_URL.replace("{mycall}", callsign)
+        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", telnet_url]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
         except FileNotFoundError:
