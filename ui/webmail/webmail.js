@@ -156,6 +156,22 @@
     }
   }
 
+  async function restoreSession() {
+    try {
+      const response = await fetch('/api/v1/auth/session', { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok || !body.authenticated) return;
+      authGate.hidden = true;
+      workspace.hidden = false;
+      showSignedInUser(body.callsign);
+      try { await loadSignature(); } catch (_) { signature = ''; }
+      document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
+      showFolder('inbox');
+    } catch (_) {
+      // The login form remains available when the session endpoint is offline.
+    }
+  }
+
   document.getElementById('login-form').addEventListener('submit', submitAuth);
   logoutButton.addEventListener('click', logout);
   document.querySelectorAll('[data-folder]').forEach((button) => button.addEventListener('click', () => showFolder(button.dataset.folder)));
@@ -180,4 +196,5 @@
       message.textContent = error.message;
     }
   });
+  restoreSession();
 })();
