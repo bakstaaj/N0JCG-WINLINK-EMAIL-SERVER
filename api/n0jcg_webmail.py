@@ -42,6 +42,9 @@ FAILURE_RE = re.compile(r"secure login failed|authentication failed|login failed
 SUCCESS_RE = re.compile(r"CMS>|Connected to|Remote accepted|Connected", re.I)
 SESSIONS = {}
 LOCK = threading.RLock()
+LOGIN_ATTEMPTS = {}
+LOGIN_WINDOW = 900
+LOGIN_LIMIT = 5
 
 
 def json_bytes(value):
@@ -267,6 +270,24 @@ def session_view(session):
     return {"authenticated": True, "email": session["email"], "callsign": session["callsign"], "source": "pat", "expires_at": int(session["last_seen"] + SESSION_IDLE)}
 
 
+def login_allowed(client_id):
+    now = time.time()
+    with LOCK:
+        attempts = [stamp for stamp in LOGIN_ATTEMPTS.get(client_id, []) if now - stamp < LOGIN_WINDOW]
+        LOGIN_ATTEMPTS[client_id] = attempts
+        return len(attempts) < LOGIN_LIMIT, max(0, int(LOGIN_WINDOW - (now - attempts[0]))) if attempts else 0
+
+
+def record_login_failure(client_id):
+    with LOCK:
+        LOGIN_ATTEMPTS.setdefault(client_id, []).append(time.time())
+
+
+def clear_login_failures(client_id):
+    with LOCK:
+        LOGIN_ATTEMPTS.pop(client_id, None)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "N0JCG-Webmail/0.1"
 
@@ -284,6 +305,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_rate_limited(self, retry_after):
+        body = json_bytes({"error": "too many login attempts; try again later", "retry_after": retry_after})
+        self.send_response(HTTPStatus.TOO_MANY_REQUESTS)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Retry-After", str(retry_after))
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length > 16384:
@@ -294,15 +325,22 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = self.read_json()
             if self.path == "/api/v1/auth/login":
+                client_id = self.headers.get("X-Forwarded-For", self.client_address[0]).split(",", 1)[0].strip()
+                allowed, retry_after = login_allowed(client_id)
+                if not allowed:
+                    self.send_rate_limited(retry_after)
+                    return
                 email, callsign = normalize_account(data.get("email"))
                 password = str(data.get("password") or "")
                 if len(password) < 1 or len(password) > 256:
                     raise ValueError("Winlink password is required")
                 valid, evidence = pat_validate(callsign, password)
                 if not valid:
+                    record_login_failure(client_id)
                     self.send_json(HTTPStatus.UNAUTHORIZED, {"error": evidence, "source": "pat"})
                     return
                 remember_account(email, callsign)
+                clear_login_failures(client_id)
                 token = create_session(email, callsign, password)
                 self.send_json(HTTPStatus.OK, {**session_view({"email": email, "callsign": callsign, "last_seen": time.time()}), "evidence": evidence}, f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_IDLE}")
                 return
