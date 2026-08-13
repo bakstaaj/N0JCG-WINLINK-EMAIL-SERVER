@@ -15,6 +15,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/var/lib/n0jcg-winlink-webmail
+ReadWritePaths=/home/@APP_USER@/.local/state/pat
 Environment=N0JCG_WEBMAIL_STATE_DIR=/var/lib/n0jcg-winlink-webmail
 
 [Install]

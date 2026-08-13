@@ -36,6 +36,7 @@ fi
 
 sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
 sudo install -d -m 0755 "$APP_ROOT/api" "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink /var/lib/n0jcg-winlink-webmail
+sudo install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.local/state/pat"
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/ui/styles.css"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/styles.css"
