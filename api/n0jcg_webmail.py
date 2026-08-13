@@ -210,6 +210,29 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
             config.unlink(missing_ok=True)
 
 
+def service_state(name):
+    try:
+        result = subprocess.run(["systemctl", "is-active", name], capture_output=True, text=True, timeout=3)
+        return result.stdout.strip() or "unknown"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return "unknown"
+
+
+def operator_diagnostics():
+    devices = {}
+    for label, pattern in (("audio", "/dev/snd"), ("serial", "/dev/digirig-serial"), ("ptt", "/dev/digirig-ptt")):
+        path = Path(pattern)
+        devices[label] = {"path": pattern, "present": path.exists()}
+    return {
+        "source": "local_probe",
+        "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "transmit_policy": "DISABLED",
+        "services": {"webmail": service_state("n0jcg-webmail.service"), "pat": service_state("pat@pi.service"), "direwolf": service_state("direwolf.service")},
+        "binaries": {"pat": bool(shutil.which("pat-winlink") or shutil.which("pat")), "direwolf": bool(shutil.which("direwolf"))},
+        "devices": devices,
+    }
+
+
 def remember_account(email, callsign):
     now = int(time.time())
     with sqlite3.connect(DB_PATH) as db:
@@ -367,6 +390,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         session = session_from(self)
+        if self.path == "/api/v1/operator/diagnostics":
+            self.send_json(HTTPStatus.OK, operator_diagnostics())
+            return
         if self.path == "/api/v1/auth/session":
             if not session:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"authenticated": False})

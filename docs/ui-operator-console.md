@@ -25,3 +25,8 @@ The operator console uses a compact N0JCG navy header, a constrained working can
 
 The shell uses semantic headings, a status role, visible link labels, keyboard-visible focus, responsive single-column behavior, and reduced-motion handling. Future live data must include freshness and source information.
 
+## Live diagnostics
+
+`GET /api/v1/operator/diagnostics` reports local, read-only evidence for the
+webmail service, Pat and Dire Wolf binaries/services, DigiRig device paths, and
+the transmit policy. It never enables a radio service or claims RF success.
