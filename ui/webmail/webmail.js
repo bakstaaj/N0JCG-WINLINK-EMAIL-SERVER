@@ -101,6 +101,8 @@
     composeView.querySelector('input[name="to"]').value = draft.recipient || '';
     composeView.querySelector('input[name="subject"]').value = draft.subject || '';
     composeView.querySelector('textarea[name="body"]').value = draft.body || '';
+    composeView.querySelector('input[name="attachment"]').value = '';
+    document.getElementById('attachment-warning').textContent = '';
     composeView.dataset.draftId = draft.id;
   }
 
@@ -132,6 +134,10 @@
     signatureView.hidden = true;
     folderTitle.textContent = 'New message';
     composeView.removeAttribute('data-draft-id');
+    composeView.querySelector('input[name="to"]').value = '';
+    composeView.querySelector('input[name="subject"]').value = '';
+    composeView.querySelector('input[name="attachment"]').value = '';
+    document.getElementById('attachment-warning').textContent = '';
     const body = composeView.querySelector('textarea[name="body"]');
     body.value = signature ? `\n\n${signature}` : '';
     composeView.querySelector('input[name="to"]').focus();
@@ -143,6 +149,7 @@
   }
 
   async function saveDraft() {
+    if (!validateAttachment()) return;
     const data = Object.fromEntries(new FormData(composeView));
     const draftId = composeView.dataset.draftId;
     const response = await fetch('/api/v1/mail/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: draftId || undefined, recipient: data.to, subject: data.subject, body: data.body }) });
@@ -150,6 +157,20 @@
     if (!response.ok) throw new Error(body.error || 'Draft could not be saved.');
     window.alert('Draft saved locally.');
     await loadMessages('drafts');
+  }
+
+  function validateAttachment() {
+    const input = composeView.querySelector('input[name="attachment"]');
+    const warning = document.getElementById('attachment-warning');
+    const file = input.files && input.files[0];
+    warning.textContent = '';
+    if (!file) return true;
+    if (file.size > 100 * 1024) {
+      warning.textContent = 'Attachment exceeds the 100 KB maximum and cannot be used.';
+      return false;
+    }
+    if (file.size > 10 * 1024) warning.textContent = 'Warning: attachments over 10 KB may be slow over packet radio.';
+    return true;
   }
 
   async function showSignature() {
@@ -252,8 +273,10 @@
   document.querySelector('[data-action="save-draft"]').addEventListener('click', async () => {
     try { await saveDraft(); } catch (error) { window.alert(error.message); }
   });
+  document.querySelector('input[name="attachment"]').addEventListener('change', validateAttachment);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (!validateAttachment()) return;
     try {
       const data = Object.fromEntries(new FormData(form));
       const response = await fetch('/api/v1/mail/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body }) });
