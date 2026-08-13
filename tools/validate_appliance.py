@@ -2,6 +2,8 @@
 """Dependency-free validation for the N0JCG Winlink appliance scaffold."""
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -82,6 +84,12 @@ def main() -> int:
     print("PASS: N0JCG-WINLINK scaffold validation")
     print(f"PASS: root={ROOT}")
     print("PASS: transmit default is disabled")
+    tests = ROOT / "tests"
+    if tests.is_dir():
+        result = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", str(tests), "-p", "test_*.py"], cwd=ROOT)
+        if result.returncode != 0:
+            return result.returncode
+        print("PASS: Python regression tests")
     return 0
 
 
