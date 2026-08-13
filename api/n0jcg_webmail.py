@@ -62,6 +62,7 @@ def init_db():
     with sqlite3.connect(DB_PATH) as db:
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_accounts (email TEXT PRIMARY KEY, callsign TEXT NOT NULL, first_validated_at INTEGER NOT NULL, last_validated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_signatures (callsign TEXT PRIMARY KEY, signature TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
         db.commit()
     os.chmod(DB_PATH, 0o600)
 
@@ -320,6 +321,27 @@ class Handler(BaseHTTPRequestHandler):
                     db.commit()
                 self.send_json(HTTPStatus.OK, {"saved": True, "signature": signature})
                 return
+            if self.path == "/api/v1/mail/drafts":
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                recipient = str(data.get("recipient") or "").strip()
+                subject = str(data.get("subject") or "").strip()
+                body = str(data.get("body") or "")
+                if len(recipient) > 320 or len(subject) > 160 or len(body) > 10000:
+                    raise ValueError("draft exceeds an allowed field length")
+                draft_id = data.get("id")
+                now = int(time.time())
+                with sqlite3.connect(DB_PATH) as db:
+                    if draft_id:
+                        db.execute("UPDATE mailbox_drafts SET recipient=?,subject=?,body=?,updated_at=? WHERE id=? AND callsign=?", (recipient, subject, body, now, int(draft_id), session["callsign"]))
+                    else:
+                        cursor = db.execute("INSERT INTO mailbox_drafts(callsign,recipient,subject,body,updated_at) VALUES(?,?,?,?,?)", (session["callsign"], recipient, subject, body, now))
+                        draft_id = cursor.lastrowid
+                    db.commit()
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "saved": True, "draft": {"id": int(draft_id), "recipient": recipient, "subject": subject, "body": body, "updated_at": now}})
+                return
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ValueError as exc:
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -370,6 +392,14 @@ class Handler(BaseHTTPRequestHandler):
             with sqlite3.connect(DB_PATH) as db:
                 row = db.execute("SELECT signature FROM mailbox_signatures WHERE callsign=?", (session["callsign"],)).fetchone()
             self.send_json(HTTPStatus.OK, {"callsign": session["callsign"], "signature": row[0] if row else ""})
+            return
+        if self.path == "/api/v1/mail/drafts":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                rows = db.execute("SELECT id,recipient,subject,body,updated_at FROM mailbox_drafts WHERE callsign=? ORDER BY updated_at DESC", (session["callsign"],)).fetchall()
+            self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "drafts": [{"id": row[0], "recipient": row[1], "subject": row[2], "body": row[3], "updated_at": row[4]} for row in rows]})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 

@@ -83,6 +83,14 @@
     composeView.querySelector('input[name="to"]').focus();
   }
 
+  async function saveDraft() {
+    const data = Object.fromEntries(new FormData(composeView));
+    const response = await fetch('/api/v1/mail/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body }) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Draft could not be saved.');
+    window.alert('Draft saved locally.');
+  }
+
   async function showSignature() {
     folderView.hidden = true;
     composeView.hidden = true;
@@ -180,7 +188,9 @@
   document.querySelector('[data-action="cancel-compose"]').addEventListener('click', () => showFolder('inbox'));
   document.querySelector('[data-action="cancel-signature"]').addEventListener('click', () => showFolder('inbox'));
   document.querySelector('[data-action="refresh"]').addEventListener('click', () => showFolder('inbox'));
-  document.querySelector('[data-action="save-draft"]').addEventListener('click', () => window.alert('Draft storage will be enabled with the mailbox API.'));
+  document.querySelector('[data-action="save-draft"]').addEventListener('click', async () => {
+    try { await saveDraft(); } catch (error) { window.alert(error.message); }
+  });
   form.addEventListener('submit', (event) => { event.preventDefault(); window.alert('Message queueing is unavailable until Pat and the Packet RMS path are verified.'); });
   signatureForm.addEventListener('submit', async (event) => {
     event.preventDefault();
