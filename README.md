@@ -78,6 +78,12 @@ To intentionally reconfigure the Nginx operator account during an upgrade:
 ./deploy/push_to_pi.sh 192.168.68.149 pi --configure-operator-auth
 ```
 
+The Pi diagnostic helper uses the same connection prompts:
+
+```bash
+./deploy/inspect_pi_webmail.sh
+```
+
 ## Safety boundary
 
 The appliance must not enable transmission merely because a USB device is present. RF operation requires an explicit operator enable, a configured radio profile, a selected Packet RMS gateway, and bounded PTT policy. USB/audio/serial detection is hardware evidence only; it is not proof of PTT or RF operation.
