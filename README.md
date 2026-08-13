@@ -72,6 +72,10 @@ to `192.168.68.149` and `pi`. For repeatable deployment, provide them directly:
 ./deploy/push_to_pi.sh 192.168.68.149 pi
 ```
 
+The helper uses the MSYS2 `sshpass` package and prompts once for the Pi SSH
+password. For a scripted run, set `N0JCG_PI_PASSWORD` in the current shell;
+the helper consumes it without placing it in the SSH command line.
+
 To intentionally reconfigure the Nginx operator account during an upgrade:
 
 ```bash

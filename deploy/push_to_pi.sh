@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+command -v sshpass >/dev/null 2>&1 || {
+    echo "FAIL: sshpass is required in MSYS2; install the sshpass package." >&2
+    exit 1
+}
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PI_IP="${1:-}"
 PI_USER="${2:-}"
@@ -19,6 +24,14 @@ if [[ -z "$PI_USER" ]]; then
 fi
 REMOTE_HOST="$PI_USER@$PI_IP"
 
+if [[ -z "${N0JCG_PI_PASSWORD:-}" ]]; then
+    printf 'Pi SSH password: '
+    read -r -s N0JCG_PI_PASSWORD
+    echo
+fi
+export SSHPASS="$N0JCG_PI_PASSWORD"
+unset N0JCG_PI_PASSWORD
+
 if [[ -n "$AUTH_OPTION" && "$AUTH_OPTION" != "--configure-operator-auth" ]]; then
     echo "FAIL: supported optional flag is --configure-operator-auth" >&2
     exit 1
@@ -31,15 +44,10 @@ for required in ui branding assets config deploy tools api; do
     }
 done
 
-ssh "$REMOTE_HOST" "mkdir -p '$REMOTE_ROOT'"
-scp -r \
-    "$REPO_ROOT/ui" \
-    "$REPO_ROOT/branding" \
-    "$REPO_ROOT/assets" \
-    "$REPO_ROOT/config" \
-    "$REPO_ROOT/deploy" \
-    "$REPO_ROOT/tools" \
-    "$REPO_ROOT/api" \
-    "$REMOTE_HOST:$REMOTE_ROOT/"
+sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "mkdir -p '$REMOTE_ROOT'"
+sshpass -e scp -o StrictHostKeyChecking=accept-new -r \
+    "$REPO_ROOT/ui" "$REPO_ROOT/branding" "$REPO_ROOT/assets" \
+    "$REPO_ROOT/config" "$REPO_ROOT/deploy" "$REPO_ROOT/tools" \
+    "$REPO_ROOT/api" "$REMOTE_HOST:$REMOTE_ROOT/"
 
-ssh -tt "$REMOTE_HOST" "sudo bash '$REMOTE_ROOT/deploy/install_static_ui.sh' '$AUTH_OPTION'"
+sshpass -e ssh -tt -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "sudo bash '$REMOTE_ROOT/deploy/install_static_ui.sh' '$AUTH_OPTION'"
