@@ -21,6 +21,15 @@
     return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   }
 
+  function setFolderCount(folder, count) {
+    const button = document.querySelector(`[data-folder="${folder}"]`);
+    const counter = button && button.querySelector('.folder-count');
+    if (counter) {
+      counter.textContent = String(count);
+      counter.setAttribute('aria-label', `${count} ${folder === 'drafts' ? 'drafts' : folder === 'queue' ? 'queued messages' : 'messages'}`);
+    }
+  }
+
   function showFolder(folder) {
     const copy = emptyCopy[folder] || emptyCopy.inbox;
     folderTitle.textContent = folder.charAt(0).toUpperCase() + folder.slice(1);
@@ -33,33 +42,60 @@
   }
 
   async function loadMessages(folder) {
+    if (folder === 'drafts') {
+      try {
+        const response = await fetch('/api/v1/mail/drafts', { cache: 'no-store' });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Drafts are unavailable.');
+        const drafts = body.drafts || [];
+        setFolderCount('drafts', drafts.length);
+        folderTitle.textContent = `Drafts ${drafts.length}`;
+        folderView.innerHTML = drafts.length ? `<div class="message-list">${drafts.map((draft) => `<button class="message-row draft-row" type="button" data-draft-id="${escapeHtml(draft.id)}"><strong>${escapeHtml(draft.subject || '(no subject)')}</strong><span>${escapeHtml(draft.recipient || '')}</span><time>${escapeHtml(new Date(draft.updated_at * 1000).toLocaleString())}</time></button>`).join('')}</div>` : '<strong>No drafts</strong><p>Saved drafts for this Winlink account will appear here.</p>';
+        folderView.querySelectorAll('[data-draft-id]').forEach((button) => button.addEventListener('click', () => openDraft(drafts.find((draft) => String(draft.id) === button.dataset.draftId))));
+      } catch (error) {
+        folderView.innerHTML = `<strong>Drafts unavailable</strong><p>${escapeHtml(error.message)}</p>`;
+      }
+      return;
+    }
     if (folder === 'queue') {
       try {
         const response = await fetch('/api/v1/mail/queue', { cache: 'no-store' });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || 'Send queue is unavailable.');
         const queue = body.queue || [];
+        setFolderCount('queue', queue.length);
         folderView.innerHTML = queue.length ? `<div class="message-list">${queue.map((item) => `<div class="message-row"><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.recipient)}</span><time>${escapeHtml(item.state)}</time></div>`).join('')}</div>` : '<strong>Send queue is empty</strong><p>No messages are waiting for a verified Pat/Packet transmission path.</p>';
         folderTitle.textContent = `Send queue ${queue.length}`;
       } catch (error) { folderView.innerHTML = `<strong>Queue unavailable</strong><p>${escapeHtml(error.message)}</p>`; }
       return;
     }
-    if (folder !== 'inbox' && folder !== 'sent' && folder !== 'drafts') return;
+    if (folder !== 'inbox' && folder !== 'sent') return;
     try {
       const response = await fetch(`/api/v1/mail/messages?folder=${encodeURIComponent(folder)}`, { cache: 'no-store' });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Mailbox is unavailable.');
       const messages = body.messages || [];
       const count = messages.length;
+      setFolderCount(folder, count);
       const title = folder === 'inbox' ? `Inbox ${count}` : `${folder.charAt(0).toUpperCase() + folder.slice(1)} ${count}`;
       folderView.innerHTML = count ? `<div class="message-list">${messages.map((message) => `<button class="message-row" type="button" data-message-id="${escapeHtml(message.MID)}"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
       folderTitle.textContent = title;
       folderView.querySelectorAll('[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
-      const inboxButton = document.querySelector('[data-folder="inbox"]');
-      if (inboxButton && folder === 'inbox') inboxButton.innerHTML = `Inbox <span aria-label="${count} messages">${count}</span>`;
     } catch (error) {
       folderView.innerHTML = `<strong>Mailbox unavailable</strong><p>${error.message}</p>`;
     }
+  }
+
+  function openDraft(draft) {
+    if (!draft) return;
+    folderView.hidden = true;
+    signatureView.hidden = true;
+    composeView.hidden = false;
+    folderTitle.textContent = 'Edit draft';
+    composeView.querySelector('input[name="to"]').value = draft.recipient || '';
+    composeView.querySelector('input[name="subject"]').value = draft.subject || '';
+    composeView.querySelector('textarea[name="body"]').value = draft.body || '';
+    composeView.dataset.draftId = draft.id;
   }
 
   async function showMessage(folder, mid) {
@@ -89,17 +125,25 @@
     composeView.hidden = false;
     signatureView.hidden = true;
     folderTitle.textContent = 'New message';
+    composeView.removeAttribute('data-draft-id');
     const body = composeView.querySelector('textarea[name="body"]');
     body.value = signature ? `\n\n${signature}` : '';
     composeView.querySelector('input[name="to"]').focus();
   }
 
+  async function refreshFolderCounts() {
+    await Promise.allSettled([loadMessages('drafts'), loadMessages('queue')]);
+    showFolder('inbox');
+  }
+
   async function saveDraft() {
     const data = Object.fromEntries(new FormData(composeView));
-    const response = await fetch('/api/v1/mail/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body }) });
+    const draftId = composeView.dataset.draftId;
+    const response = await fetch('/api/v1/mail/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: draftId || undefined, recipient: data.to, subject: data.subject, body: data.body }) });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || 'Draft could not be saved.');
     window.alert('Draft saved locally.');
+    await loadMessages('drafts');
   }
 
   async function showSignature() {
@@ -167,7 +211,7 @@
       showSignedInUser(body.callsign);
       try { await loadSignature(); } catch (_) { signature = ''; }
       document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
-      showFolder('inbox');
+      refreshFolderCounts();
     } catch (error) {
       authMessage(formElement, error.message + ' No mailbox data was opened.');
     } finally {
@@ -185,7 +229,7 @@
       showSignedInUser(body.callsign);
       try { await loadSignature(); } catch (_) { signature = ''; }
       document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
-      showFolder('inbox');
+      refreshFolderCounts();
     } catch (_) {
       // The login form remains available when the session endpoint is offline.
     }
@@ -210,6 +254,7 @@
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Message could not be queued.');
       window.alert('Message queued locally. Transmission remains disabled until the Pat/Packet path is verified.');
+      composeView.removeAttribute('data-draft-id');
       showFolder('queue');
     } catch (error) { window.alert(error.message); }
   });
