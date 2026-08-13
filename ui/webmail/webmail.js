@@ -82,9 +82,10 @@
       if (!response.ok) throw new Error(body.error || 'Mailbox is unavailable.');
       const messages = body.messages || [];
       const count = messages.length;
-      setFolderCount(folder, count);
-      const title = folder === 'inbox' ? `Inbox ${count}` : `${folder.charAt(0).toUpperCase() + folder.slice(1)} ${count}`;
-      folderView.innerHTML = count ? `<div class="message-list">${messages.map((message) => `<button class="message-row" type="button" data-message-id="${escapeHtml(message.MID)}"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
+      const unread = messages.filter((message) => message.Unread).length;
+      setFolderCount(folder, folder === 'inbox' ? unread : count);
+      const title = folder === 'inbox' ? `Inbox ${unread} unread / ${count} total` : `${folder.charAt(0).toUpperCase() + folder.slice(1)} ${count}`;
+      folderView.innerHTML = count ? `<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" type="button" data-message-id="${escapeHtml(message.MID)}"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
       folderTitle.textContent = title;
       folderView.querySelectorAll('[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
     } catch (error) {
@@ -123,6 +124,11 @@
         showFolder(folder);
       });
       await fetch(`/api/v1/mail/messages/${encodeURIComponent(mid)}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder }) });
+      if (folder === 'inbox' && message.Unread) {
+        const counter = document.querySelector('[data-folder="inbox"] .folder-count');
+        const current = counter ? Number.parseInt(counter.textContent, 10) || 0 : 0;
+        setFolderCount('inbox', Math.max(0, current - 1));
+      }
     } catch (error) {
       folderView.innerHTML = `<strong>Message unavailable</strong><p>${error.message}</p>`;
     }
