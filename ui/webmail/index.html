@@ -27,6 +27,16 @@
     .compose-actions { display:flex; flex-wrap:wrap; gap:var(--n0-space-3); }
     .compose-actions button { border:0; border-radius:var(--n0-radius-sm); padding:11px 16px; color:var(--n0-color-white); background:var(--n0-color-blue); font-weight:700; cursor:pointer; }
     .compose-actions button.secondary { color:var(--n0-color-navy); background:var(--n0-color-mist); border:1px solid var(--n0-color-border); }
+    .auth-gate { max-width:680px; margin:0 auto var(--n0-space-6); }
+    .auth-tabs { display:flex; gap:var(--n0-space-2); margin-bottom:var(--n0-space-6); border-bottom:1px solid var(--n0-color-border); }
+    .auth-tabs button { border:0; border-bottom:3px solid transparent; padding:10px 14px; color:var(--n0-color-text-muted); background:transparent; font:inherit; font-weight:700; cursor:pointer; }
+    .auth-tabs button.active { color:var(--n0-color-blue); border-bottom-color:var(--n0-color-blue); }
+    .auth-form { display:grid; gap:var(--n0-space-4); }
+    .auth-form label { display:grid; gap:var(--n0-space-2); color:var(--n0-color-text-muted); font-size:.85rem; font-weight:700; }
+    .auth-form input:not([type="checkbox"]) { width:100%; padding:11px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
+    .auth-form .consent { display:flex; grid-template-columns:none; align-items:start; gap:var(--n0-space-2); font-weight:400; }
+    .auth-form .consent input { margin-top:.3rem; }
+    .auth-message { min-height:1.5em; margin:0; color:var(--n0-color-warning); }
     @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(4,1fr); } .mail-nav button { text-align:center; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } }
   </style>
 </head>
@@ -40,7 +50,14 @@
       <div><p class="eyebrow">N0JCG Open Radio Platform</p><h1 id="mail-title">Webmail</h1><p class="lede">Compose and manage Winlink messages through the client appliance mailbox.</p></div>
       <div class="status-badge status-unavailable" role="status"><span aria-hidden="true">!</span> Mailbox: Not connected</div>
     </section>
-    <section class="mail-layout" aria-label="Webmail workspace">
+    <section id="auth-gate" class="card auth-gate" aria-labelledby="auth-title">
+      <div class="auth-tabs" role="tablist" aria-label="Webmail account access"><button class="active" type="button" data-auth-tab="login">Sign in</button><button type="button" data-auth-tab="register">Register</button></div>
+      <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in to your Winlink mailbox</h2><p>Use the Winlink radio email address and secure-login password assigned to your account. The appliance will validate them through Pat when the Winlink client path is configured.</p></div>
+      <form id="login-form" class="auth-form"><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input name="password" type="password" autocomplete="current-password" required></label><button class="button" type="submit">Sign in</button><p class="auth-message" role="status"></p></form>
+      <form id="register-form" class="auth-form" hidden><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input name="password" type="password" autocomplete="new-password" required></label><label>Confirm Winlink password<input name="password_confirm" type="password" autocomplete="new-password" required></label><label class="consent"><input name="consent" type="checkbox" required> I understand this password is used to validate my Winlink mailbox through Pat and must not be reused for unrelated services.</label><button class="button" type="submit">Register mailbox</button><p class="auth-message" role="status"></p></form>
+      <p class="muted">Radio email ownership is not proven until Pat completes a successful Winlink CMS or Packet transaction. Credentials are not displayed back in the UI.</p>
+    </section>
+    <section id="mail-workspace" class="mail-layout" aria-label="Webmail workspace" hidden>
       <nav class="mail-nav" aria-label="Mailbox folders">
         <button class="active" data-folder="inbox">Inbox <span aria-label="0 messages">0</span></button>
         <button data-folder="sent">Sent</button>

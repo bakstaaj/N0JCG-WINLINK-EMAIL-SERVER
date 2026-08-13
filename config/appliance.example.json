@@ -35,6 +35,8 @@
     "mailbox_backend": "pat",
     "webmail_path": "/webmail/",
     "api_base": "/api/v1",
+    "auth_mode": "winlink-credential-validation",
+    "session_idle_minutes": 30,
     "send_enabled": false,
     "offline_queue": true
   },
