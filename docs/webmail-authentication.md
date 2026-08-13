@@ -40,6 +40,11 @@ The backend must:
 The mailbox API must use the authenticated session identity and its isolated Pat mailbox when calling Pat;
 the browser must not select an arbitrary mailbox or callsign in a message URL.
 
+The login endpoint permits five failed attempts per client address within a
+15-minute window. A successful Winlink authentication clears that client's
+failure window; rate-limited responses include `Retry-After` and do not reveal
+whether an account exists.
+
 ## Radio limitation
 
 Winlink credential validation may use a CMS/Telnet path where configured, but
