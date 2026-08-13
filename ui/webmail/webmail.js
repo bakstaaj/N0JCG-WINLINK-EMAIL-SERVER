@@ -5,6 +5,7 @@
   const form = composeView;
   const authGate = document.getElementById('auth-gate');
   const workspace = document.getElementById('mail-workspace');
+  const mailUser = document.getElementById('mail-user');
   const emptyCopy = {
     inbox: ['No mailbox connection', 'Pat is installed but not connected to a Winlink mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
     sent: ['No sent messages', 'Sent message history will appear here after the Pat mailbox is connected.'],
@@ -32,6 +33,13 @@
     formElement.querySelector('.auth-message').textContent = message;
   }
 
+  function showSignedInUser(callsign) {
+    const safeCallsign = String(callsign || '').trim().toUpperCase();
+    if (!safeCallsign) return;
+    mailUser.textContent = ` - ${safeCallsign}`;
+    document.title = `N0JCG Winlink Email Server | Webmail - ${safeCallsign}`;
+  }
+
   async function submitAuth(event) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -45,7 +53,8 @@
       if (!response.ok) throw new Error(body.error || 'Mailbox validation is unavailable.');
       authGate.hidden = true;
       workspace.hidden = false;
-      document.querySelector('.status-badge').innerHTML = 'Mailbox: Connected';
+      showSignedInUser(body.callsign);
+      document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
       showFolder('inbox');
     } catch (error) {
       authMessage(formElement, error.message + ' No mailbox data was opened.');
