@@ -58,6 +58,7 @@ def init_db():
     os.chmod(STATE_DIR, 0o700)
     with sqlite3.connect(DB_PATH) as db:
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_accounts (email TEXT PRIMARY KEY, callsign TEXT NOT NULL, first_validated_at INTEGER NOT NULL, last_validated_at INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_signatures (callsign TEXT PRIMARY KEY, signature TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
         db.commit()
     os.chmod(DB_PATH, 0o600)
 
@@ -229,6 +230,19 @@ class Handler(BaseHTTPRequestHandler):
                         SESSIONS.pop(session["token"], None)
                 self.send_json(HTTPStatus.OK, {"authenticated": False}, "n0jcg_webmail_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
                 return
+            if self.path == "/api/v1/account/signature":
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                signature = str(data.get("signature") or "").strip()
+                if len(signature) > 2000:
+                    raise ValueError("signature must be 2000 characters or fewer")
+                with sqlite3.connect(DB_PATH) as db:
+                    db.execute("INSERT INTO mailbox_signatures(callsign,signature,updated_at) VALUES(?,?,?) ON CONFLICT(callsign) DO UPDATE SET signature=excluded.signature, updated_at=excluded.updated_at", (session["callsign"], signature, int(time.time())))
+                    db.commit()
+                self.send_json(HTTPStatus.OK, {"saved": True, "signature": signature})
+                return
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ValueError as exc:
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -248,6 +262,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
             else:
                 self.send_json(HTTPStatus.OK, {"authenticated": True, "mailbox": session["email"], "callsign": session["callsign"], "source": "pat", "state": "AUTHENTICATED", "message_access": "pending_pat_mailbox_api"})
+            return
+        if self.path == "/api/v1/account/signature":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                row = db.execute("SELECT signature FROM mailbox_signatures WHERE callsign=?", (session["callsign"],)).fetchone()
+            self.send_json(HTTPStatus.OK, {"callsign": session["callsign"], "signature": row[0] if row else ""})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
