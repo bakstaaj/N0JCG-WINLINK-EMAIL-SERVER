@@ -17,6 +17,10 @@
     queue: ['Send queue is empty', 'Messages queued for Packet transmission will appear here with delivery state and retry evidence.']
   };
 
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+  }
+
   function showFolder(folder) {
     const copy = emptyCopy[folder] || emptyCopy.inbox;
     folderTitle.textContent = folder.charAt(0).toUpperCase() + folder.slice(1);
@@ -25,6 +29,41 @@
     composeView.hidden = true;
     signatureView.hidden = true;
     document.querySelectorAll('[data-folder]').forEach((button) => button.classList.toggle('active', button.dataset.folder === folder));
+    loadMessages(folder);
+  }
+
+  async function loadMessages(folder) {
+    if (folder !== 'inbox' && folder !== 'sent' && folder !== 'drafts') return;
+    try {
+      const response = await fetch(`/api/v1/mail/messages?folder=${encodeURIComponent(folder)}`, { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Mailbox is unavailable.');
+      const messages = body.messages || [];
+      const count = messages.length;
+      const title = folder === 'inbox' ? `Inbox ${count}` : `${folder.charAt(0).toUpperCase() + folder.slice(1)} ${count}`;
+      folderView.innerHTML = count ? `<div class="message-list">${messages.map((message) => `<button class="message-row" type="button" data-message-id="${escapeHtml(message.MID)}"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
+      folderTitle.textContent = title;
+      folderView.querySelectorAll('[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
+      const inboxButton = document.querySelector('[data-folder="inbox"]');
+      if (inboxButton && folder === 'inbox') inboxButton.innerHTML = `Inbox <span aria-label="${count} messages">${count}</span>`;
+    } catch (error) {
+      folderView.innerHTML = `<strong>Mailbox unavailable</strong><p>${error.message}</p>`;
+    }
+  }
+
+  async function showMessage(folder, mid) {
+    folderView.innerHTML = '<p>Loading message…</p>';
+    try {
+      const response = await fetch(`/api/v1/mail/messages/${encodeURIComponent(mid)}?folder=${encodeURIComponent(folder)}`, { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Message unavailable.');
+      const message = body.message;
+      folderTitle.textContent = message.Subject || '(no subject)';
+      folderView.innerHTML = `<article class="message-detail"><p><strong>From:</strong> ${escapeHtml(JSON.stringify(message.From || ''))}</p><p><strong>Date:</strong> ${escapeHtml(message.Date || '')}</p><pre>${escapeHtml(message.Body || '')}</pre><button type="button" data-action="back-inbox">Back to ${escapeHtml(folder)}</button></article>`;
+      folderView.querySelector('[data-action="back-inbox"]').addEventListener('click', () => showFolder(folder));
+    } catch (error) {
+      folderView.innerHTML = `<strong>Message unavailable</strong><p>${error.message}</p>`;
+    }
   }
 
   function showCompose() {

@@ -14,12 +14,15 @@ import json
 import os
 import re
 import secrets
+import socket
 import shutil
 import sqlite3
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -151,6 +154,53 @@ def pat_validate(callsign, password):
             config.unlink(missing_ok=True)
 
 
+def pat_mailbox_request(session, box, mid=None):
+    """Ask a short-lived Pat HTTP process to decode mailbox messages."""
+    config = None
+    process = None
+    mailbox_dir = STATE_DIR / "mailbox" / session["callsign"]
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="n0jcg-pat-mail-", suffix=".json", delete=False) as handle:
+            config = Path(handle.name)
+        write_pat_config(session["callsign"], session["password"], config)
+        os.chmod(config, 0o600)
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        command = [PAT_BIN, "--config", str(config), "--mycall", session["callsign"], "--mbox", str(mailbox_dir), "--listen", "telnet", "--addr", f"127.0.0.1:{port}", "http"]
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        except FileNotFoundError:
+            alternate = shutil.which("pat")
+            if not alternate:
+                raise RuntimeError("Pat client is not installed on the appliance.")
+            command[0] = alternate
+            process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        endpoint = f"http://127.0.0.1:{port}/api/mailbox/{box}"
+        if mid:
+            endpoint += f"/{mid}"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                error = (process.stderr.read() if process.stderr else "").strip().splitlines()
+                raise RuntimeError(error[-1] if error else "Pat mailbox service stopped unexpectedly.")
+            try:
+                with urllib.request.urlopen(endpoint, timeout=1) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError):
+                time.sleep(0.1)
+        raise RuntimeError("Pat mailbox API timed out.")
+    finally:
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        if config:
+            config.unlink(missing_ok=True)
+
+
 def remember_account(email, callsign):
     now = int(time.time())
     with sqlite3.connect(DB_PATH) as db:
@@ -262,6 +312,29 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
             else:
                 self.send_json(HTTPStatus.OK, {"authenticated": True, "mailbox": session["email"], "callsign": session["callsign"], "source": "pat", "state": "AUTHENTICATED", "message_access": "pending_pat_mailbox_api"})
+            return
+        if self.path.startswith("/api/v1/mail/messages"):
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            try:
+                path, _, query = self.path.partition("?")
+                params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
+                folder = params.get("folder", "inbox")
+                boxes = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}
+                box = boxes.get(folder)
+                if not box:
+                    raise ValueError("unknown mailbox folder")
+                prefix = "/api/v1/mail/messages/"
+                mid = path[len(prefix):] if path.startswith(prefix) else ""
+                if mid and ("/" in mid or not re.fullmatch(r"[A-Za-z0-9._-]+", mid)):
+                    raise ValueError("invalid message id")
+                payload = pat_mailbox_request(session, box, mid or None)
+                self.send_json(HTTPStatus.OK, {"source": "pat", "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "state": "READY", "folder": folder, "messages": payload if not mid else [], "message": payload if mid else None})
+            except ValueError as exc:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except RuntimeError as exc:
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "source": "pat"})
             return
         if self.path == "/api/v1/account/signature":
             if not session:

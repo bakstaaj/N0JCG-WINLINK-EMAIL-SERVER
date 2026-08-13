@@ -19,8 +19,8 @@ implemented:
 
 - `GET /api/v1/mail/status` — Pat process, mailbox identity, freshness, and
   connection state.
-- `GET /api/v1/mail/messages?folder=inbox` — normalized message summaries.
-- `GET /api/v1/mail/messages/{id}` — message body and attachment metadata.
+- `GET /api/v1/mail/messages?folder=inbox` — authenticated normalized message summaries from Pat's mailbox API.
+- `GET /api/v1/mail/messages/{id}?folder=inbox` — authenticated message body and attachment metadata from Pat.
 - `POST /api/v1/mail/drafts` — save a draft locally or in the Pat mailbox.
 - `POST /api/v1/mail/queue` — validate and queue a message for transmission.
 - `POST /api/v1/mail/queue/{id}/cancel` — cancel before modem ownership.
