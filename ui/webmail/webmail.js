@@ -50,8 +50,14 @@
         const drafts = body.drafts || [];
         setFolderCount('drafts', drafts.length);
         folderTitle.textContent = `Drafts ${drafts.length}`;
-        folderView.innerHTML = drafts.length ? `<div class="message-list">${drafts.map((draft) => `<button class="message-row draft-row" type="button" data-draft-id="${escapeHtml(draft.id)}"><strong>${escapeHtml(draft.subject || '(no subject)')}</strong><span>${escapeHtml(draft.recipient || '')}</span><time>${escapeHtml(new Date(draft.updated_at * 1000).toLocaleString())}</time></button>`).join('')}</div>` : '<strong>No drafts</strong><p>Saved drafts for this Winlink account will appear here.</p>';
+        folderView.innerHTML = drafts.length ? `<div class="message-list">${drafts.map((draft) => `<div class="message-row draft-row"><button class="draft-open" type="button" data-draft-id="${escapeHtml(draft.id)}"><strong>${escapeHtml(draft.subject || '(no subject)')}</strong><span>${escapeHtml(draft.recipient || '')}</span><time>${escapeHtml(new Date(draft.updated_at * 1000).toLocaleString())}</time></button><button class="draft-delete" type="button" data-delete-draft="${escapeHtml(draft.id)}">Delete</button></div>`).join('')}</div>` : '<strong>No drafts</strong><p>Saved drafts for this Winlink account will appear here.</p>';
         folderView.querySelectorAll('[data-draft-id]').forEach((button) => button.addEventListener('click', () => openDraft(drafts.find((draft) => String(draft.id) === button.dataset.draftId))));
+        folderView.querySelectorAll('[data-delete-draft]').forEach((button) => button.addEventListener('click', async () => {
+          if (!window.confirm('Delete this draft?')) return;
+          const response = await fetch(`/api/v1/mail/drafts/${encodeURIComponent(button.dataset.deleteDraft)}`, { method: 'DELETE' });
+          if (!response.ok) { window.alert('The draft could not be deleted.'); return; }
+          await loadMessages('drafts');
+        }));
       } catch (error) {
         folderView.innerHTML = `<strong>Drafts unavailable</strong><p>${escapeHtml(error.message)}</p>`;
       }

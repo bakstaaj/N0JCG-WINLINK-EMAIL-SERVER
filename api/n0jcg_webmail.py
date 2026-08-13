@@ -456,6 +456,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         session = session_from(self)
+        draft_prefix = "/api/v1/mail/drafts/"
+        if self.path.startswith(draft_prefix):
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            draft_id = self.path[len(draft_prefix):]
+            if not draft_id.isdigit():
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid draft id"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                cursor = db.execute("DELETE FROM mailbox_drafts WHERE id=? AND callsign=?", (int(draft_id), session["callsign"]))
+                db.commit()
+            if cursor.rowcount == 0:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "draft not found"})
+            else:
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "deleted": True})
+            return
         prefix = "/api/v1/mail/messages/"
         if not self.path.startswith(prefix):
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
