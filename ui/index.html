@@ -28,7 +28,7 @@
       <article class="card"><div class="card-heading"><h2>Winlink client</h2><span class="status status-unavailable">Unavailable</span></div><dl class="facts"><div><dt>Pat</dt><dd>Installed; service inactive</dd></div><div><dt>Dire Wolf</dt><dd>Installed; service inactive</dd></div><div><dt>Packet RMS gateway</dt><dd>Not configured</dd></div></dl></article>
     </section>
     <section class="card next-step"><div><p class="eyebrow">Next safe step</p><h2>Complete pre-radio validation</h2><p>Run software, audio, and configuration checks without enabling transmission.</p></div><a class="button" href="#diagnostics">Open diagnostics</a></section>
-    <section id="diagnostics" class="card"><div class="card-heading"><h2>Diagnostics</h2><span id="diagnostic-status" class="status status-unknown">Checking…</span></div><ul id="diagnostic-list" class="checklist"><li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Checking local USB and serial evidence…</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Checking Dire Wolf installation and service state…</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Checking Pat installation and service state…</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Unavailable until the radio is connected.</small></span></li></ul><p id="diagnostic-observed" class="muted"></p></section>
+    <section id="diagnostics" class="card"><div class="card-heading"><h2>Diagnostics</h2><div><span id="diagnostic-status" class="status status-unknown">Checking…</span> <button class="header-button diagnostic-refresh" id="diagnostic-refresh" type="button">Refresh</button></div></div><ul id="diagnostic-list" class="checklist"><li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Checking local USB and serial evidence…</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Checking Dire Wolf installation and service state…</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Checking Pat installation and service state…</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Unavailable until the radio is connected.</small></span></li></ul><p id="diagnostic-observed" class="muted"></p></section>
   </main>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> N0JCG Open Radio Platform</footer>
   <script>
@@ -41,14 +41,23 @@
     const diagnosticList = document.getElementById('diagnostic-list');
     const diagnosticObserved = document.getElementById('diagnostic-observed');
     const present = (value) => value ? 'present' : 'not detected';
-    fetch('../api/v1/operator/diagnostics', { cache: 'no-store' }).then((response) => response.json()).then((data) => {
+    async function refreshDiagnostics() {
+      diagnosticStatus.textContent = 'Checking…';
+      try {
+        const response = await fetch('../api/v1/operator/diagnostics?ts=' + Date.now(), { cache: 'no-store' });
+        if (!response.ok) throw new Error('diagnostics unavailable');
+        const data = await response.json();
       const devices = data.devices || {};
       const services = data.services || {};
       diagnosticList.innerHTML = `<li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Audio: ${present(devices.audio && devices.audio.present)}; serial: ${present(devices.serial && devices.serial.present)}; PTT: ${present(devices.ptt && devices.ptt.present)}.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf binary: ${data.binaries && data.binaries.direwolf ? 'installed' : 'not installed'}; service: ${services.direwolf || 'unknown'}.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Pat binary: ${data.binaries && data.binaries.pat ? 'installed' : 'not installed'}; Webmail: ${services.webmail || 'unknown'}.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Not verified; radio is not connected and transmit policy remains ${data.transmit_policy || 'DISABLED'}.</small></span></li>`;
       diagnosticStatus.textContent = 'Live evidence';
       diagnosticStatus.className = 'status status-detected';
       diagnosticObserved.textContent = `Observed ${data.observed_at || 'unknown'} from ${data.source || 'local probe'}.`;
-    }).catch(() => { diagnosticStatus.textContent = 'Unavailable'; });
+      } catch (_) { diagnosticStatus.textContent = 'Unavailable'; diagnosticStatus.className = 'status status-unavailable'; }
+    }
+    document.getElementById('diagnostic-refresh').addEventListener('click', refreshDiagnostics);
+    refreshDiagnostics();
+    window.setInterval(refreshDiagnostics, 30000);
   </script>
 </body>
 </html>
