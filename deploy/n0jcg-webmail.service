@@ -1,0 +1,21 @@
+[Unit]
+Description=N0JCG Winlink Email Server webmail authentication gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@APP_USER@
+Group=@APP_USER@
+ExecStart=/usr/bin/python3 /opt/n0jcg-winlink/api/n0jcg_webmail.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/n0jcg-winlink-webmail
+Environment=N0JCG_WEBMAIL_STATE_DIR=/var/lib/n0jcg-winlink-webmail
+
+[Install]
+WantedBy=multi-user.target

@@ -50,6 +50,7 @@ def main() -> int:
         ROOT / "ui/styles.css",
         ROOT / "ui/webmail/index.html",
         ROOT / "ui/webmail/webmail.js",
+        ROOT / "api/n0jcg_webmail.py",
         ROOT / "config/registration.example.json",
         ROOT / "tools/registration.py",
         ROOT / "deploy/setup_operator_auth.sh",

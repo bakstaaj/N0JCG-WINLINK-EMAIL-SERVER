@@ -4,6 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_ROOT="${INSTALL_ROOT:-/var/www/n0jcg-winlink}"
 APP_ROOT="${APP_ROOT:-/opt/n0jcg-winlink}"
+APP_USER="${N0JCG_APP_USER:-${SUDO_USER:-pi}}"
 NGINX_SITE="/etc/nginx/sites-available/n0jcg-winlink.conf"
 NGINX_ENABLED="/etc/nginx/sites-enabled/n0jcg-winlink.conf"
 CONFIGURE_OPERATOR_AUTH=0
@@ -26,6 +27,7 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/ui/styles.css"
     test -f "$REPO_ROOT/ui/webmail/index.html"
     test -f "$REPO_ROOT/ui/webmail/webmail.js"
+    test -f "$REPO_ROOT/api/n0jcg_webmail.py"
     test -f "$REPO_ROOT/branding/tokens.css"
     test -f "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg"
     echo "PASS: static UI source and brand assets are present"
@@ -33,7 +35,7 @@ if [[ "${1:-}" == "--check-only" ]]; then
 fi
 
 sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
-sudo install -d -m 0755 "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink
+sudo install -d -m 0755 "$APP_ROOT/api" "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink /var/lib/n0jcg-winlink-webmail
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/ui/styles.css"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/styles.css"
@@ -45,6 +47,9 @@ sudo install -m 0644 "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg" "$INSTALL
 sudo install -m 0644 "$REPO_ROOT/assets/brand/N0JCG_Header_Dark_Approved.png" "$INSTALL_ROOT/assets/brand/N0JCG_Header_Dark_Approved.png"
 sudo install -m 0644 "$REPO_ROOT/config/registration.example.json" "$APP_ROOT/config/registration.example.json"
 sudo install -m 0755 "$REPO_ROOT/tools/registration.py" "$APP_ROOT/tools/registration.py"
+sudo install -m 0755 "$REPO_ROOT/api/n0jcg_webmail.py" "$APP_ROOT/api/n0jcg_webmail.py"
+sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-webmail.service" | sudo tee /etc/systemd/system/n0jcg-webmail.service >/dev/null
+sudo chown -R "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink-webmail
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_operator_auth.sh" "$APP_ROOT/tools/setup_operator_auth.sh"
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"
 if [[ ! -f /etc/nginx/snippets/n0jcg-winlink-auth.conf.optional ]]; then
@@ -53,6 +58,8 @@ fi
 sudo ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
 sudo nginx -t
 sudo systemctl reload nginx
+sudo systemctl daemon-reload
+sudo systemctl enable --now n0jcg-webmail.service
 
 if [[ ! -f /etc/nginx/.htpasswd-n0jcg-winlink || "$CONFIGURE_OPERATOR_AUTH" == "1" ]]; then
     if ! command -v htpasswd >/dev/null 2>&1; then
