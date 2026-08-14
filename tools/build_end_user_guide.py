@@ -39,6 +39,20 @@ def shade_paragraph(paragraph, fill):
     shd.set(qn("w:fill"), fill)
 
 
+def add_bottom_rule(paragraph, color="00B8D9", size="12", space="5"):
+    p_pr = paragraph._p.get_or_add_pPr()
+    borders = p_pr.find(qn("w:pBdr"))
+    if borders is None:
+        borders = OxmlElement("w:pBdr")
+        p_pr.append(borders)
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), size)
+    bottom.set(qn("w:space"), space)
+    bottom.set(qn("w:color"), color)
+    borders.append(bottom)
+
+
 def set_cell_margins(cell, top=100, start=120, bottom=100, end=120):
     tc = cell._tc
     tc_pr = tc.get_or_add_tcPr()
@@ -96,10 +110,17 @@ def style_document(doc):
 
 def add_header_footer(doc):
     for section in doc.sections:
+        section.different_first_page_header_footer = True
+        first_header = section.first_page_header.paragraphs[0]
+        first_header.text = ""
         header = section.header.paragraphs[0]
         header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         r = header.add_run("N0JCG WINLINK EMAIL SERVER  |  END USER GUIDE")
         set_run(r, size=8, color=SLATE, bold=True)
+        first_footer = section.first_page_footer.paragraphs[0]
+        first_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.0    Page 1"), size=8, color=SLATE)
+        add_bottom_rule(first_footer)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r = footer.add_run("N0JCG Open Radio Platform  |  Client-side appliance, not an RMS gateway")
@@ -180,27 +201,41 @@ def build():
     style_document(doc)
     add_header_footer(doc)
 
-    # Cover
-    cover = doc.add_paragraph()
-    cover.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    cover.paragraph_format.space_before = Pt(38)
-    cover.add_run().add_picture(str(ROOT / "assets" / "brand" / "N0JCG_Header_Dark_Approved.png"), width=Inches(4.4))
+    # Cover: match the N0JCG Scanner handbook family layout.
+    banner = doc.add_table(rows=1, cols=1)
+    banner.autofit = False
+    banner.columns[0].width = Inches(6.85)
+    banner_cell = banner.cell(0, 0)
+    shade(banner_cell, "0A1F44")
+    set_cell_margins(banner_cell, top=220, start=220, bottom=220, end=220)
+    banner_para = banner_cell.paragraphs[0]
+    banner_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    banner_para.add_run().add_picture(str(ROOT / "assets" / "brand" / "N0JCG_Header_Dark_Approved.png"), width=Inches(4.7))
+    doc.add_paragraph().paragraph_format.space_after = Pt(26)
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(30)
-    set_run(p.add_run("N0JCG WINLINK EMAIL SERVER"), size=24, color=NAVY, bold=True, font="Aptos Display")
+    p.paragraph_format.space_after = Pt(12)
+    set_run(p.add_run("OPERATOR HANDBOOK"), size=10.5, color=CYAN, bold=True, font="Aptos Display")
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_run(p.add_run("End User Guide"), size=17, color=BLUE, bold=True, font="Aptos Display")
+    p.paragraph_format.space_after = Pt(8)
+    set_run(p.add_run("N0JCG Winlink Email Server"), size=25, color=NAVY, bold=True, font="Aptos Display")
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(18)
-    set_run(p.add_run("Client-side Winlink email for the N0JCG Open Radio Platform"), size=11, color=SLATE)
-    add_callout(doc, "PRODUCT ROLE", "A Raspberry Pi client appliance for private Winlink mailbox access through an external Packet RMS gateway. The appliance is not an RMS gateway.", PALE_CYAN)
+    p.paragraph_format.space_after = Pt(12)
+    set_run(p.add_run("Installation, client setup, webmail operation, and troubleshooting"), size=13, color=SLATE)
+    rule = doc.add_paragraph()
+    rule.paragraph_format.space_before = Pt(18)
+    rule.paragraph_format.space_after = Pt(20)
+    add_bottom_rule(rule, size="14", space="1")
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(145)
-    set_run(p.add_run("Version 1.0  |  Host role: PI-WINLINK"), size=9, color=SLATE)
+    p.paragraph_format.space_after = Pt(26)
+    set_run(p.add_run("A complete guide to the Raspberry Pi client appliance, Winlink mailbox access, DigiRig Mobile integration, and safe Packet RMS operation."), size=11, color=NAVY)
+    add_table(doc, ["Release", "Publication"], [
+        ("0.1.0", "August 2026"),
+        ("PRODUCT ROLE\nClient-side Winlink email", "AUDIENCE\nOperators and mailbox users"),
+    ], [3.42, 3.42])
     doc.add_page_break()
 
     doc.add_heading("At a glance", level=1)
