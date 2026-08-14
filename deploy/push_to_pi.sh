@@ -49,14 +49,6 @@ cleanup_connectivity_env() {
 trap cleanup_connectivity_env EXIT
 
 if printf '%s\n' "${INSTALL_OPTIONS[@]}" | grep -qx -- '--configure-connectivity'; then
-    printf 'Preferred Wi-Fi SSID (leave blank to skip preferred Wi-Fi): '
-    read -r N0JCG_WIFI_SSID
-    N0JCG_WIFI_PASSWORD=""
-    if [[ -n "$N0JCG_WIFI_SSID" ]]; then
-        printf 'Preferred Wi-Fi password: '
-        read -r -s N0JCG_WIFI_PASSWORD
-        echo
-    fi
     printf 'Fallback hotspot SSID [N0JCG-WES]: '
     read -r N0JCG_AP_SSID
     N0JCG_AP_SSID="${N0JCG_AP_SSID:-N0JCG-WES}"
@@ -71,8 +63,6 @@ if printf '%s\n' "${INSTALL_OPTIONS[@]}" | grep -qx -- '--configure-connectivity
     [[ ${#N0JCG_AP_PASSWORD} -ge 8 ]] || { echo "FAIL: hotspot password must be at least 8 characters" >&2; exit 1; }
     CONNECTIVITY_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/n0jcg-connectivity.XXXXXX")"
     {
-        printf 'N0JCG_WIFI_SSID=%q\n' "$N0JCG_WIFI_SSID"
-        printf 'N0JCG_WIFI_PASSWORD=%q\n' "$N0JCG_WIFI_PASSWORD"
         printf 'N0JCG_AP_SSID=%q\n' "$N0JCG_AP_SSID"
         printf 'N0JCG_AP_PASSWORD=%q\n' "$N0JCG_AP_PASSWORD"
     } > "$CONNECTIVITY_ENV_FILE"

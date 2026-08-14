@@ -31,38 +31,15 @@ prompt_value() {
     printf '%s' "${value:-$current}"
 }
 
-prompt_secret() {
-    local label="$1" value confirm
-    printf '%s: ' "$label"
-    read -r -s value
-    echo
-    printf 'Confirm %s: ' "$label"
-    read -r -s confirm
-    echo
-    [[ "$value" == "$confirm" ]] || { echo "FAIL: values did not match" >&2; exit 1; }
-    printf '%s' "$value"
-}
-
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y network-manager
 systemctl enable --now NetworkManager.service
 install -d -m 0755 "$CONFIG_DIR"
 
-WIFI_SSID="${N0JCG_WIFI_SSID:-}"
-WIFI_PASSWORD="${N0JCG_WIFI_PASSWORD:-}"
 AP_SSID="${N0JCG_AP_SSID:-N0JCG-WES}"
 AP_PASSWORD="${N0JCG_AP_PASSWORD:-Password}"
 
 if [[ "${1:-}" != "--noninteractive" && "$FROM_ENV" != "1" ]]; then
-    WIFI_SSID="$(prompt_value 'Preferred Wi-Fi SSID' "$WIFI_SSID")"
-    if [[ -n "$WIFI_SSID" && -z "$WIFI_PASSWORD" ]]; then
-        WIFI_PASSWORD="$(prompt_secret 'Preferred Wi-Fi password')"
-    elif [[ -n "$WIFI_SSID" ]]; then
-        printf 'Preferred Wi-Fi password (press Enter to keep the saved value): '
-        read -r -s entered
-        echo
-        WIFI_PASSWORD="${entered:-$WIFI_PASSWORD}"
-    fi
     AP_SSID="$(prompt_value 'Fallback hotspot SSID' "$AP_SSID")"
     printf 'Fallback hotspot password [%s] (change recommended): ' "$AP_PASSWORD"
     read -r -s entered
@@ -80,7 +57,6 @@ if [[ -n "$AP_PASSWORD" && ${#AP_PASSWORD} -lt 8 ]]; then
 fi
 
 cat > "$CONFIG_FILE" <<EOF
-N0JCG_WIFI_SSID=$(printf '%q' "$WIFI_SSID")
 N0JCG_AP_SSID=$(printf '%q' "$AP_SSID")
 N0JCG_AP_ADDRESS=$AP_ADDRESS
 N0JCG_AP_DHCP_RANGE=$AP_DHCP_RANGE
@@ -91,11 +67,6 @@ chmod 0600 "$CONFIG_FILE"
 nmcli connection delete "$WIFI_CONNECTION" >/dev/null 2>&1 || true
 nmcli connection delete "$HOTSPOT_CONNECTION" >/dev/null 2>&1 || true
 nmcli connection delete "$USB_CONNECTION" >/dev/null 2>&1 || true
-
-if [[ -n "$WIFI_SSID" ]]; then
-    nmcli connection add type wifi ifname wlan0 con-name "$WIFI_CONNECTION" ssid "$WIFI_SSID"
-    nmcli connection modify "$WIFI_CONNECTION" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASSWORD" ipv4.method auto ipv6.method auto connection.autoconnect yes connection.autoconnect-priority 100
-fi
 
 nmcli connection add type wifi ifname wlan0 con-name "$HOTSPOT_CONNECTION" ssid "$AP_SSID"
 nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.mode ap 802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASSWORD" ipv4.method shared ipv4.addresses "$AP_ADDRESS" ipv4.shared-dhcp-range "$AP_DHCP_RANGE" ipv6.method disabled connection.autoconnect no
@@ -124,6 +95,6 @@ systemctl enable n0jcg-usb-gadget.service n0jcg-network-fallback.service
 systemctl restart n0jcg-usb-gadget.service || true
 systemctl restart n0jcg-network-fallback.service
 echo "PASS: Wi-Fi and fallback hotspot configured"
-echo "INFO: preferred Wi-Fi uses DHCP; fallback hotspot is $AP_SSID at $AP_ADDRESS with leases $AP_DHCP_RANGE"
+echo "INFO: hotspot is $AP_SSID at $AP_ADDRESS with leases $AP_DHCP_RANGE"
 echo "INFO: USB gadget uses 192.168.60.1 on the Pi 4 USB-C power/data port"
 echo "INFO: reboot required if dwc2 was newly added to the boot configuration"
