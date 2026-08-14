@@ -242,8 +242,8 @@ def build():
     doc.add_paragraph("N0JCG Winlink Email Server places the operator console, Winlink Client mailbox, local drafts and queues, and the webmail experience on one Raspberry Pi appliance. The external radio and Packet RMS gateway provide the radio transport.")
     add_callout(doc, "THE OPERATING MODEL", "Browser -> N0JCG webmail and operator console -> N0JCG management layer -> Winlink Client mailbox and transport -> DigiRig Mobile -> radio -> external Packet RMS gateway.")
     add_table(doc, ["Surface", "Use it for", "Address"], [
-        ("Operator console", "Configuration, status, diagnostics, and safety controls", "http://PI-IP:8096/ui/"),
-        ("User webmail", "Inbox, compose, drafts, folders, signature, and queue", "http://PI-IP:8096/webmail/"),
+        ("Operator console", "Configuration, status, diagnostics, and safety controls", "http://PI-IP/ui/"),
+        ("User webmail", "Inbox, compose, drafts, folders, signature, and queue", "http://PI-IP/webmail/"),
         ("Deployment helper", "Install and upgrade from MSYS2 Bash", "./deploy/push_to_pi.sh"),
     ], [1.35, 3.5, 1.95])
     doc.add_heading("Capability boundary", level=2)
@@ -295,8 +295,8 @@ def build():
     add_callout(doc, "RECONFIGURE OPERATOR AUTH", "Use ./deploy/push_to_pi.sh PI-IP PI-USER --configure-operator-auth when the operator account must be intentionally changed.", PALE_BLUE)
     doc.add_heading("Verify", level=2)
     add_steps(doc, [
-        "Open http://PI-IP:8096/ui/ from a workstation on the same network.",
-        "Open http://PI-IP:8096/webmail/.",
+        "Open http://PI-IP/ui/ from a workstation on the same network.",
+        "Open http://PI-IP/webmail/.",
         "Confirm the deployment helper reports that the API was deployed and n0jcg-webmail.service is active.",
     ])
     doc.add_page_break()
@@ -360,8 +360,8 @@ def build():
     add_table(doc, ["Task", "Location"], [
         ("Deploy or upgrade", "./deploy/push_to_pi.sh in MSYS2 Bash"),
         ("Diagnostics", "./deploy/inspect_pi_webmail.sh"),
-        ("Operator console", "http://PI-IP:8096/ui/"),
-        ("User webmail", "http://PI-IP:8096/webmail/"),
+        ("Operator console", "http://PI-IP/ui/"),
+        ("User webmail", "http://PI-IP/webmail/"),
         ("Default SSH user", "pi"),
         ("Product host role", "PI-WINLINK"),
         ("Maximum attachment", "100 KB"),

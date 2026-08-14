@@ -64,6 +64,7 @@ sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/to
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"
+sudo rm -f /etc/nginx/sites-enabled/default
 if [[ ! -f /etc/nginx/snippets/n0jcg-winlink-auth.conf.optional ]]; then
     printf 'auth_basic off;\n' | sudo tee /etc/nginx/snippets/n0jcg-winlink-auth.conf.optional >/dev/null
 fi
@@ -101,4 +102,5 @@ else
     echo "PASS: existing operator authentication preserved"
 fi
 
-echo "PASS: N0JCG Winlink Email Server UI installed at http://$(hostname -I | awk '{print $1}'):8096/ui/"
+echo "PASS: N0JCG Winlink Email Server installed at http://$(hostname -I | awk '{print $1}')/webmail/"
+echo "INFO: operator console is available at http://$(hostname -I | awk '{print $1}')/ui/"

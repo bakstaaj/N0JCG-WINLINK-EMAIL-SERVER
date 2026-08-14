@@ -41,6 +41,8 @@ Pat and Dire Wolf remain upstream components. N0JCG owns configuration, health e
 
 Use `N0JCG` exactly as written. Use **N0JCG Winlink Email Server** on visible product surfaces, while retaining repository, service, API, and runtime identifiers for compatibility.
 
+The web server listens on HTTP port 80. Open `/` for the webmail redirect, `/webmail/` for user mail, or `/ui/` for the password-protected operator console.
+
 ## Validation
 
 Run the dependency-free scaffold check with:

@@ -103,8 +103,8 @@ Existing operator authentication is preserved during normal upgrades. To intenti
 
 Open these URLs from a computer on the same network:
 
-- Operator console: `http://PI-IP:8096/ui/`
-- User webmail: `http://PI-IP:8096/webmail/`
+- Operator console: `http://PI-IP/ui/`
+- User webmail: `http://PI-IP/webmail/`
 
 Replace `PI-IP` with the address entered during deployment. The deployment helper must report that the API was deployed and the `n0jcg-webmail.service` service is active.
 
@@ -196,8 +196,8 @@ Use the operator console for configuration and diagnostics. Use webmail for mail
 |---|---|
 | Deploy or upgrade | `./deploy/push_to_pi.sh` in MSYS2 Bash |
 | Diagnostics | `./deploy/inspect_pi_webmail.sh` |
-| Operator console | `http://PI-IP:8096/ui/` |
-| User webmail | `http://PI-IP:8096/webmail/` |
+| Operator console | `http://PI-IP/ui/` |
+| User webmail | `http://PI-IP/webmail/` |
 | Default SSH user | `pi` |
 | Product host role | `PI-WINLINK` |
 | Maximum attachment | 100 KB |
