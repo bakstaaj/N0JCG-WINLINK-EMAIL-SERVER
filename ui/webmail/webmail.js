@@ -5,6 +5,7 @@
   const form = composeView;
   const signatureView = document.getElementById('signature-view');
   const signatureForm = signatureView;
+  const folderManager = document.getElementById('folder-manager');
   let signature = '';
   const authGate = document.getElementById('auth-gate');
   const workspace = document.getElementById('mail-workspace');
@@ -38,6 +39,7 @@
     folderView.hidden = false;
     composeView.hidden = true;
     signatureView.hidden = true;
+    folderManager.hidden = true;
     document.querySelectorAll('[data-folder]').forEach((button) => button.classList.toggle('active', button.dataset.folder === folder));
     loadMessages(folder);
   }
@@ -104,6 +106,7 @@
     if (!draft) return;
     folderView.hidden = true;
     signatureView.hidden = true;
+    folderManager.hidden = true;
     composeView.hidden = false;
     folderTitle.textContent = 'Edit draft';
     composeView.querySelector('input[name="to"]').value = draft.recipient || '';
@@ -202,6 +205,7 @@
     folderView.hidden = true;
     composeView.hidden = true;
     signatureView.hidden = false;
+    folderManager.hidden = true;
     signatureForm.querySelector('textarea').value = signature;
     signatureForm.querySelector('.auth-message').textContent = '';
     try {
@@ -213,6 +217,31 @@
     } catch (error) {
       signatureForm.querySelector('.auth-message').textContent = error.message;
     }
+  }
+
+  async function showFolderManager() {
+    folderView.hidden = true;
+    composeView.hidden = true;
+    signatureView.hidden = true;
+    folderManager.hidden = false;
+    await loadFolders();
+  }
+
+  async function loadFolders() {
+    const list = document.getElementById('custom-folder-list');
+    const message = document.getElementById('folder-message');
+    try {
+      const response = await fetch('/api/v1/mail/folders', { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Folders are unavailable.');
+      list.innerHTML = (body.folders || []).map((folder) => `<div class="custom-folder-row"><span>${escapeHtml(folder.name)}</span><button type="button" class="draft-delete" data-delete-folder="${escapeHtml(folder.id)}">Delete</button></div>`).join('') || '<p class="muted">No custom folders yet.</p>';
+      list.querySelectorAll('[data-delete-folder]').forEach((button) => button.addEventListener('click', async () => {
+        if (!window.confirm('Delete this folder?')) return;
+        const response = await fetch(`/api/v1/mail/folders/${encodeURIComponent(button.dataset.deleteFolder)}`, { method: 'DELETE' });
+        if (!response.ok) { message.textContent = 'The folder could not be deleted.'; return; }
+        await loadFolders();
+      }));
+    } catch (error) { message.textContent = error.message; }
   }
 
   function authMessage(formElement, message) {
@@ -310,6 +339,21 @@
 
   document.getElementById('login-form').addEventListener('submit', submitAuth);
   logoutButton.addEventListener('click', logout);
+  document.querySelector('[data-action="folders"]').addEventListener('click', showFolderManager);
+  document.querySelector('[data-action="cancel-folders"]').addEventListener('click', () => showFolder('inbox'));
+  document.getElementById('folder-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const message = document.getElementById('folder-message');
+    try {
+      const name = new FormData(event.currentTarget).get('name');
+      const response = await fetch('/api/v1/mail/folders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Folder could not be created.');
+      event.currentTarget.reset();
+      message.textContent = 'Folder created.';
+      await loadFolders();
+    } catch (error) { message.textContent = error.message; }
+  });
   document.querySelectorAll('[data-folder]').forEach((button) => button.addEventListener('click', () => showFolder(button.dataset.folder)));
   document.querySelectorAll('[data-action="compose"]').forEach((button) => button.addEventListener('click', showCompose));
   document.querySelector('[data-action="signature"]').addEventListener('click', showSignature);

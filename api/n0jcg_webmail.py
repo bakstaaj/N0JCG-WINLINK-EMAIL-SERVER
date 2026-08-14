@@ -67,6 +67,7 @@ def init_db():
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_signatures (callsign TEXT PRIMARY KEY, signature TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', state TEXT NOT NULL, created_at INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_folders (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(callsign,name))")
         for table in ("mailbox_drafts", "mailbox_queue"):
             for column in ("attachment_name TEXT NOT NULL DEFAULT ''", "attachment_type TEXT NOT NULL DEFAULT ''", "attachment_data BLOB NOT NULL DEFAULT ''"):
                 try:
@@ -311,6 +312,15 @@ def parse_attachment(data):
     return str(attachment.get("name") or "attachment")[:255], str(attachment.get("type") or "application/octet-stream")[:120], content
 
 
+def folder_name(value):
+    name = re.sub(r"\s+", " ", str(value or "").strip())
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,39}", name):
+        raise ValueError("folder names must be 1-40 characters and use letters, numbers, spaces, _ or -")
+    if name.lower() in {"inbox", "sent", "drafts", "send queue", "archive"}:
+        raise ValueError("that name is reserved")
+    return name
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "N0JCG-Webmail/0.1"
 
@@ -449,6 +459,22 @@ class Handler(BaseHTTPRequestHandler):
                     db.commit()
                 self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "QUEUED", "queued": True, "id": int(cursor.lastrowid), "created_at": now})
                 return
+            if self.path == "/api/v1/mail/folders":
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                name = folder_name(data.get("name"))
+                now = int(time.time())
+                try:
+                    with sqlite3.connect(DB_PATH) as db:
+                        cursor = db.execute("INSERT INTO mailbox_folders(callsign,name,created_at) VALUES(?,?,?)", (session["callsign"], name, now))
+                        db.commit()
+                except sqlite3.IntegrityError:
+                    self.send_json(HTTPStatus.CONFLICT, {"error": "that folder already exists"})
+                    return
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "created": True, "folder": {"id": int(cursor.lastrowid), "name": name, "created_at": now}})
+                return
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ValueError as exc:
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -519,10 +545,35 @@ class Handler(BaseHTTPRequestHandler):
                 rows = db.execute("SELECT id,recipient,subject,state,created_at FROM mailbox_queue WHERE callsign=? ORDER BY created_at DESC", (session["callsign"],)).fetchall()
             self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "queue": [{"id": row[0], "recipient": row[1], "subject": row[2], "state": row[3], "created_at": row[4]} for row in rows]})
             return
+        if self.path == "/api/v1/mail/folders":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                rows = db.execute("SELECT id,name,created_at FROM mailbox_folders WHERE callsign=? ORDER BY name COLLATE NOCASE", (session["callsign"],)).fetchall()
+            self.send_json(HTTPStatus.OK, {"source": "local_queue", "folders": [{"id": row[0], "name": row[1], "created_at": row[2]} for row in rows]})
+            return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def do_DELETE(self):
         session = session_from(self)
+        folder_prefix = "/api/v1/mail/folders/"
+        if self.path.startswith(folder_prefix):
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            folder_id = self.path[len(folder_prefix):]
+            if not folder_id.isdigit():
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid folder id"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                cursor = db.execute("DELETE FROM mailbox_folders WHERE id=? AND callsign=?", (int(folder_id), session["callsign"]))
+                db.commit()
+            if cursor.rowcount == 0:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "folder not found"})
+            else:
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "deleted": True})
+            return
         queue_prefix = "/api/v1/mail/queue/"
         if self.path.startswith(queue_prefix):
             if not session:

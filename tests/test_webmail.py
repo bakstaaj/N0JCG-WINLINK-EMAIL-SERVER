@@ -39,6 +39,13 @@ class WebmailHelpersTests(unittest.TestCase):
     def test_empty_attachment_is_allowed(self):
         self.assertEqual(MODULE.parse_attachment({}), ("", "", b""))
 
+    def test_folder_name_validation(self):
+        self.assertEqual(MODULE.folder_name(" Field Notes "), "Field Notes")
+        with self.assertRaises(ValueError):
+            MODULE.folder_name("Inbox")
+        with self.assertRaises(ValueError):
+            MODULE.folder_name("bad/name")
+
 
 if __name__ == "__main__":
     unittest.main()
