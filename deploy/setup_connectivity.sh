@@ -7,7 +7,8 @@ WIFI_CONNECTION="n0jcg-wifi"
 HOTSPOT_CONNECTION="n0jcg-hotspot"
 USB_CONNECTION="n0jcg-usb-gadget"
 AP_ADDRESS="192.168.50.1/24"
-USB_ADDRESS="192.168.77.1/24"
+AP_DHCP_RANGE="192.168.50.100,192.168.50.200"
+USB_ADDRESS="192.168.60.1/24"
 
 [[ "${EUID:-$(id -u)}" == "0" ]] || { echo "FAIL: run as root (sudo $0)" >&2; exit 1; }
 FROM_ENV=0
@@ -77,6 +78,7 @@ cat > "$CONFIG_FILE" <<EOF
 N0JCG_WIFI_SSID=$(printf '%q' "$WIFI_SSID")
 N0JCG_AP_SSID=$(printf '%q' "$AP_SSID")
 N0JCG_AP_ADDRESS=$AP_ADDRESS
+N0JCG_AP_DHCP_RANGE=$AP_DHCP_RANGE
 N0JCG_USB_ADDRESS=$USB_ADDRESS
 EOF
 chmod 0600 "$CONFIG_FILE"
@@ -91,7 +93,7 @@ if [[ -n "$WIFI_SSID" ]]; then
 fi
 
 nmcli connection add type wifi ifname wlan0 con-name "$HOTSPOT_CONNECTION" ssid "$AP_SSID"
-nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.mode ap 802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASSWORD" ipv4.method shared ipv4.addresses "$AP_ADDRESS" ipv6.method disabled connection.autoconnect no
+nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.mode ap 802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASSWORD" ipv4.method shared ipv4.addresses "$AP_ADDRESS" ipv4.shared-dhcp-range "$AP_DHCP_RANGE" ipv6.method disabled connection.autoconnect no
 
 nmcli connection add type ethernet ifname usb0 con-name "$USB_CONNECTION"
 nmcli connection modify "$USB_CONNECTION" ipv4.method shared ipv4.addresses "$USB_ADDRESS" ipv6.method disabled connection.autoconnect yes
@@ -117,6 +119,6 @@ systemctl enable n0jcg-usb-gadget.service n0jcg-network-fallback.service
 systemctl restart n0jcg-usb-gadget.service || true
 systemctl restart n0jcg-network-fallback.service
 echo "PASS: Wi-Fi and fallback hotspot configured"
-echo "INFO: preferred Wi-Fi uses DHCP; fallback hotspot is $AP_SSID at $AP_ADDRESS"
-echo "INFO: USB gadget uses 192.168.77.1 on the Pi 4 USB-C power/data port"
+echo "INFO: preferred Wi-Fi uses DHCP; fallback hotspot is $AP_SSID at $AP_ADDRESS with leases $AP_DHCP_RANGE"
+echo "INFO: USB gadget uses 192.168.60.1 on the Pi 4 USB-C power/data port"
 echo "INFO: reboot required if dwc2 was newly added to the boot configuration"

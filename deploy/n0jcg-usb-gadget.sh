@@ -43,6 +43,6 @@ if command -v nmcli >/dev/null 2>&1 && nmcli connection show "n0jcg-usb-gadget" 
     nmcli connection up "n0jcg-usb-gadget" || true
 else
     ip link set usb0 up || true
-    ip addr replace 192.168.77.1/24 dev usb0 || true
+    ip addr replace 192.168.60.1/24 dev usb0 || true
 fi
-echo "N0JCG USB Ethernet gadget active at 192.168.77.1."
+echo "N0JCG USB Ethernet gadget active at 192.168.60.1."

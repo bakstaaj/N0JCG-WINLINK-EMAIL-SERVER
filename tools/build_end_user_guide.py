@@ -287,11 +287,11 @@ def build():
     doc.add_heading("Operator authentication", level=2)
     doc.add_paragraph("During the initial install, the installer asks for an Nginx operator-console username, password, and password confirmation. Existing operator authentication is preserved during normal upgrades.")
     doc.add_heading("Wi-Fi, hotspot fallback, and USB gadget", level=2)
-    doc.add_paragraph("To configure connectivity during deployment, add --configure-connectivity. The helper prompts for the preferred Wi-Fi SSID/password and confirms the fallback hotspot password. The Pi uses Wi-Fi when it receives a DHCP address; otherwise it activates the secured N0JCG-WINLINK-SETUP hotspot with DHCP at 192.168.50.1.")
+    doc.add_paragraph("To configure connectivity during deployment, add --configure-connectivity. The helper prompts for the preferred Wi-Fi SSID/password and confirms the fallback hotspot password. The Pi uses Wi-Fi when it receives a DHCP address; otherwise it activates the secured N0JCG-WINLINK-SETUP hotspot at 192.168.50.1 with leases from 192.168.50.100 through 192.168.50.200.")
     p = doc.add_paragraph()
     set_run(p.add_run("./deploy/push_to_pi.sh 192.168.68.149 pi --configure-connectivity"), size=10, color=RGBColor(255,255,255), font="Consolas")
     shade_paragraph(p, "0A1F44")
-    doc.add_paragraph("The Pi 4 USB Ethernet gadget is available at 192.168.77.1 through the USB-C power/data port. The blue USB host ports are not gadget ports.")
+    doc.add_paragraph("The Pi 4 USB Ethernet gadget is available at 192.168.60.1 through the USB-C power/data port. The blue USB host ports are not gadget ports.")
     add_callout(doc, "RECONFIGURE OPERATOR AUTH", "Use ./deploy/push_to_pi.sh PI-IP PI-USER --configure-operator-auth when the operator account must be intentionally changed.", PALE_BLUE)
     doc.add_heading("Verify", level=2)
     add_steps(doc, [

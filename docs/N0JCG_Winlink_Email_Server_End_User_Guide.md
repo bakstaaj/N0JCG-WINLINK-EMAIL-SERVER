@@ -87,9 +87,9 @@ To configure connectivity during deployment, add `--configure-connectivity`:
 ./deploy/push_to_pi.sh 192.168.68.149 pi --configure-connectivity
 ```
 
-The helper prompts for the preferred Wi-Fi SSID/password and confirms the fallback hotspot password. The Pi uses Wi-Fi when it receives a DHCP address. If Wi-Fi cannot connect, NetworkManager activates the secured `N0JCG-WINLINK-SETUP` hotspot with DHCP at `192.168.50.1`.
+The helper prompts for the preferred Wi-Fi SSID/password and confirms the fallback hotspot password. The Pi uses Wi-Fi when it receives a DHCP address. If Wi-Fi cannot connect, NetworkManager activates the secured `N0JCG-WINLINK-SETUP` hotspot at `192.168.50.1` and leases addresses from `192.168.50.100` through `192.168.50.200`.
 
-The Pi 4 USB Ethernet gadget is also installed. Connect a computer to the Pi 4 USB-C power/data port—not a blue USB host port—to reach the appliance directly at `192.168.77.1`.
+The Pi 4 USB Ethernet gadget is also installed. Connect a computer to the Pi 4 USB-C power/data port—not a blue USB host port—to reach the appliance directly at `192.168.60.1`.
 
 ### Optional repeat deployment
 

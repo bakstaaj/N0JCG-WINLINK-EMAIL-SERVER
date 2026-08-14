@@ -81,9 +81,10 @@ Ethernet gadget during installation:
 
 The helper prompts for the preferred Wi-Fi SSID/password and confirms the
 fallback hotspot password. If Wi-Fi cannot obtain a DHCP address, the Pi
-activates the `N0JCG-WINLINK-SETUP` hotspot with DHCP at `192.168.50.1`.
+activates the `N0JCG-WINLINK-SETUP` hotspot at `192.168.50.1` and leases
+addresses from `192.168.50.100` through `192.168.50.200`.
 The USB gadget is available as a direct Ethernet connection at
-`192.168.77.1` through the Pi 4 USB-C power/data port; the blue USB host ports
+`192.168.60.1` through the Pi 4 USB-C power/data port; the blue USB host ports
 are not gadget ports.
 
 The helper uses the MSYS2 `sshpass` package and prompts once for the Pi SSH
