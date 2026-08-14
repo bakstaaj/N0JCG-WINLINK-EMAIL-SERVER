@@ -346,13 +346,14 @@
   document.querySelector('[data-action="cancel-folders"]').addEventListener('click', () => showFolder('inbox'));
   document.getElementById('folder-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const message = document.getElementById('folder-message');
     try {
-      const name = new FormData(event.currentTarget).get('name');
+      const name = new FormData(formElement).get('name');
       const response = await fetch('/api/v1/mail/folders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Folder could not be created.');
-      event.currentTarget.reset();
+      formElement.reset();
       message.textContent = 'Folder created.';
       await loadFolders();
     } catch (error) { message.textContent = error.message; }
