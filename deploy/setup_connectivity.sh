@@ -50,8 +50,8 @@ install -d -m 0755 "$CONFIG_DIR"
 
 WIFI_SSID="${N0JCG_WIFI_SSID:-}"
 WIFI_PASSWORD="${N0JCG_WIFI_PASSWORD:-}"
-AP_SSID="${N0JCG_AP_SSID:-N0JCG-WINLINK-SETUP}"
-AP_PASSWORD="${N0JCG_AP_PASSWORD:-}"
+AP_SSID="${N0JCG_AP_SSID:-N0JCG-WES}"
+AP_PASSWORD="${N0JCG_AP_PASSWORD:-Password}"
 
 if [[ "${1:-}" != "--noninteractive" && "$FROM_ENV" != "1" ]]; then
     WIFI_SSID="$(prompt_value 'Preferred Wi-Fi SSID' "$WIFI_SSID")"
@@ -64,9 +64,14 @@ if [[ "${1:-}" != "--noninteractive" && "$FROM_ENV" != "1" ]]; then
         WIFI_PASSWORD="${entered:-$WIFI_PASSWORD}"
     fi
     AP_SSID="$(prompt_value 'Fallback hotspot SSID' "$AP_SSID")"
-    if [[ -z "$AP_PASSWORD" ]]; then
-        AP_PASSWORD="$(prompt_secret 'Fallback hotspot password (8+ characters)')"
-    fi
+    printf 'Fallback hotspot password [%s] (change recommended): ' "$AP_PASSWORD"
+    read -r -s entered
+    echo
+    AP_PASSWORD="${entered:-$AP_PASSWORD}"
+    printf 'Confirm fallback hotspot password: '
+    read -r -s confirm
+    echo
+    [[ "$AP_PASSWORD" == "$confirm" ]] || { echo "FAIL: values did not match" >&2; exit 1; }
 fi
 
 if [[ -n "$AP_PASSWORD" && ${#AP_PASSWORD} -lt 8 ]]; then

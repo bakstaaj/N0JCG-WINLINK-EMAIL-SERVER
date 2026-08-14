@@ -57,12 +57,13 @@ if printf '%s\n' "${INSTALL_OPTIONS[@]}" | grep -qx -- '--configure-connectivity
         read -r -s N0JCG_WIFI_PASSWORD
         echo
     fi
-    printf 'Fallback hotspot SSID [N0JCG-WINLINK-SETUP]: '
+    printf 'Fallback hotspot SSID [N0JCG-WES]: '
     read -r N0JCG_AP_SSID
-    N0JCG_AP_SSID="${N0JCG_AP_SSID:-N0JCG-WINLINK-SETUP}"
-    printf 'Fallback hotspot password (8+ characters): '
+    N0JCG_AP_SSID="${N0JCG_AP_SSID:-N0JCG-WES}"
+    printf 'Fallback hotspot password [Password] (change recommended): '
     read -r -s N0JCG_AP_PASSWORD
     echo
+    N0JCG_AP_PASSWORD="${N0JCG_AP_PASSWORD:-Password}"
     printf 'Confirm fallback hotspot password: '
     read -r -s N0JCG_AP_PASSWORD_CONFIRM
     echo

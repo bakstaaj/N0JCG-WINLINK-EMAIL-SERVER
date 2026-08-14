@@ -93,6 +93,8 @@ The Pi 4 USB Ethernet gadget is also installed. Connect a computer to the Pi 4 U
 
 ### Optional repeat deployment
 
+The default fallback hotspot is `N0JCG-WES` with initial password `Password`; the installer prompts for confirmation and a replacement password during first-time setup.
+
 Existing operator authentication is preserved during normal upgrades. To intentionally reconfigure the operator account:
 
 ```bash

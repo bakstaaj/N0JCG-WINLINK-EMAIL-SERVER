@@ -6,7 +6,7 @@ HOTSPOT_CONNECTION="n0jcg-hotspot"
 WIFI_DEVICE="wlan0"
 
 wifi_is_ready() {
-    nmcli -t -f DEVICE,STATE device status 2>/dev/null | grep -q "^${WIFI_DEVICE}:connected$" && \
+    nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | grep -q "^${WIFI_CONNECTION}:${WIFI_DEVICE}$" && \
         ip -4 addr show dev "$WIFI_DEVICE" 2>/dev/null | grep -q 'inet '
 }
 
