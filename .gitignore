@@ -5,5 +5,8 @@ config/appliance.json
 runtime/
 logs/
 .env
+docs/rendered-guide/
+docs/assets/operator-console.png
+docs/assets/manage-folders.png
 .env.*
 !.env.example
