@@ -9,6 +9,7 @@ NGINX_SITE="/etc/nginx/sites-available/n0jcg-winlink.conf"
 NGINX_ENABLED="/etc/nginx/sites-enabled/n0jcg-winlink.conf"
 CONFIGURE_OPERATOR_AUTH=0
 CONFIGURE_CONNECTIVITY=0
+INITIAL_CONNECTIVITY=0
 
 for option in "$@"; do
     case "$option" in
@@ -38,6 +39,10 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg"
     echo "PASS: static UI source and brand assets are present"
     exit 0
+fi
+
+if [[ ! -f /etc/n0jcg-winlink/network.conf ]]; then
+    INITIAL_CONNECTIVITY=1
 fi
 
 sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
@@ -80,14 +85,14 @@ if ! grep -q 'PAT_TELNET_URL' "$APP_ROOT/api/n0jcg_webmail.py"; then
 fi
 echo "PASS: webmail service restarted with current API revision"
 
-if [[ "$CONFIGURE_CONNECTIVITY" == "1" ]]; then
+if [[ "$CONFIGURE_CONNECTIVITY" == "1" || "$INITIAL_CONNECTIVITY" == "1" ]]; then
     if [[ -n "${N0JCG_CONNECTIVITY_ENV:-}" ]]; then
         sudo env N0JCG_CONNECTIVITY_ENV="$N0JCG_CONNECTIVITY_ENV" bash "$APP_ROOT/tools/setup_connectivity.sh"
     else
         sudo bash "$APP_ROOT/tools/setup_connectivity.sh"
     fi
 else
-    echo "INFO: Wi-Fi/USB gadget setup not changed; rerun with --configure-connectivity to configure it."
+    echo "INFO: Wi-Fi/USB gadget setup preserved; rerun with --configure-connectivity to reconfigure it."
 fi
 
 if [[ ! -f /etc/nginx/.htpasswd-n0jcg-winlink || "$CONFIGURE_OPERATOR_AUTH" == "1" ]]; then
