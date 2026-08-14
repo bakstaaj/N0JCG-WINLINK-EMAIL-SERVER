@@ -201,7 +201,13 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 error = (process.stderr.read() if process.stderr else "").strip().splitlines()
-                raise RuntimeError(error[-1] if error else "Pat mailbox service stopped unexpectedly.")
+                detail = error[-1] if error else ""
+                # Pat can emit its CLI usage text when the mailbox HTTP
+                # process cannot initialize. That text is useful in logs but
+                # is not actionable for a webmail user.
+                if "--send-only" in detail or "Download inbound messages later" in detail:
+                    raise RuntimeError("Your Winlink account is authenticated, but the local mailbox is not available yet. Connect the radio and run a mailbox sync, then select Refresh.")
+                raise RuntimeError(detail or "The local Winlink mailbox service stopped unexpectedly. Select Refresh or ask the operator to check the client service.")
             try:
                 with urllib.request.urlopen(request, timeout=1) as response:
                     body = response.read().decode("utf-8")
