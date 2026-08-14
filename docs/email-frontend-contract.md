@@ -32,6 +32,8 @@ implemented:
 - `GET /api/v1/mail/folders` — list custom folders for the authenticated callsign.
 - `POST /api/v1/mail/folders` — create a custom folder for the authenticated callsign.
 - `DELETE /api/v1/mail/folders/{id}` — delete a custom folder owned by the authenticated callsign.
+- `GET /api/v1/mail/folders/{id}/messages` — list messages assigned to a custom folder.
+- `POST /api/v1/mail/messages/{id}/move` — assign a mailbox message to an owned custom folder.
 - `POST /api/v1/mail/queue/{id}/cancel` — cancel before modem ownership.
 
 Every response must identify its source (`pat`, `local_queue`, or `unknown`),

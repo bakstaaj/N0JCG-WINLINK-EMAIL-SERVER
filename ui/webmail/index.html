@@ -65,6 +65,9 @@
     .folder-manager form { display:flex; gap:var(--n0-space-2); }
     .folder-manager input { flex:1; padding:10px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
     .custom-folder-row { display:flex; align-items:center; justify-content:space-between; gap:var(--n0-space-3); padding:10px 0; border-top:1px solid #e9edf2; }
+    .custom-folder-nav { display:grid; gap:var(--n0-space-2); margin:0 0 var(--n0-space-2) var(--n0-space-4); }
+    .custom-folder-nav button { border:0; padding:7px 8px; color:var(--n0-color-text-muted); background:transparent; text-align:left; font:inherit; cursor:pointer; }
+    .custom-folder-nav button:hover { color:var(--n0-color-blue); }
     .folder-count { display:inline-grid; min-width:1.5em; min-height:1.5em; place-items:center; margin-left:4px; padding:0 4px; border-radius:999px; color:var(--n0-color-navy); background:var(--n0-color-mist); font-size:.78em; }
     @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(4,1fr); } .mail-nav button { text-align:center; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } }
   </style>
@@ -87,6 +90,7 @@
     <section id="mail-workspace" class="mail-layout" aria-label="Webmail workspace" hidden>
       <nav class="mail-nav" aria-label="Mailbox folders">
         <button class="active" data-folder="inbox">Inbox <span class="folder-count" aria-label="0 messages">0</span></button>
+        <div id="custom-folder-nav" class="custom-folder-nav" aria-label="Custom folders"></div>
         <button data-folder="sent">Sent <span class="folder-count" aria-label="0 messages">0</span></button>
         <button data-folder="drafts">Drafts <span class="folder-count" aria-label="0 drafts">0</span></button>
         <button data-folder="queue">Send queue <span class="folder-count" aria-label="0 queued messages">0</span></button>

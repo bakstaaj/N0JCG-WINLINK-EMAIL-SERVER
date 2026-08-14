@@ -34,7 +34,7 @@
 
   function showFolder(folder) {
     const copy = emptyCopy[folder] || emptyCopy.inbox;
-    folderTitle.textContent = folder.charAt(0).toUpperCase() + folder.slice(1);
+    folderTitle.textContent = folder.startsWith('custom:') ? 'Custom folder' : folder.charAt(0).toUpperCase() + folder.slice(1);
     folderView.innerHTML = `<strong>${copy[0]}</strong><p>${copy[1]}</p>`;
     folderView.hidden = false;
     composeView.hidden = true;
@@ -45,6 +45,18 @@
   }
 
   async function loadMessages(folder) {
+    if (folder.startsWith('custom:')) {
+      const folderId = folder.slice(7);
+      try {
+        const response = await fetch(`/api/v1/mail/folders/${encodeURIComponent(folderId)}/messages`, { cache: 'no-store' });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Folder messages are unavailable.');
+        const messages = body.messages || [];
+        folderTitle.textContent = `Custom folder ${messages.length}`;
+        folderView.innerHTML = messages.length ? `<div class="message-list">${messages.map((message) => `<button class="message-row" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="in"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : '<strong>Folder is empty</strong><p>Drag a message here from Inbox to organize it.</p>';
+        return;
+      } catch (error) { folderView.innerHTML = `<strong>Folder unavailable</strong><p>${escapeHtml(error.message)}</p>`; return; }
+    }
     if (folder === 'drafts') {
       try {
         const response = await fetch('/api/v1/mail/drafts', { cache: 'no-store' });
@@ -94,9 +106,11 @@
       const unread = messages.filter((message) => message.Unread).length;
       setFolderCount(folder, folder === 'inbox' ? unread : count);
       const title = folder === 'inbox' ? `Inbox ${unread} unread / ${count} total` : `${folder.charAt(0).toUpperCase() + folder.slice(1)} ${count}`;
-      folderView.innerHTML = count ? `<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" type="button" data-message-id="${escapeHtml(message.MID)}"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
+      const box = folder === 'inbox' ? 'in' : folder === 'sent' ? 'sent' : 'out';
+      folderView.innerHTML = count ? `<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="${box}"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
       folderTitle.textContent = title;
       folderView.querySelectorAll('[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
+      folderView.querySelectorAll('[draggable="true"]').forEach((button) => button.addEventListener('dragstart', (event) => event.dataTransfer.setData('application/x-n0jcg-message', JSON.stringify({ mid: button.dataset.messageId, box: button.dataset.messageBox }))));
     } catch (error) {
       folderView.innerHTML = `<strong>Mailbox unavailable</strong><p>${error.message}</p>`;
     }
@@ -160,7 +174,7 @@
   }
 
   async function refreshFolderCounts() {
-    await Promise.allSettled([loadMessages('drafts'), loadMessages('queue')]);
+    await Promise.allSettled([loadMessages('drafts'), loadMessages('queue'), loadFolders()]);
     showFolder('inbox');
   }
 
@@ -235,6 +249,20 @@
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Folders are unavailable.');
       list.innerHTML = (body.folders || []).map((folder) => `<div class="custom-folder-row"><span>${escapeHtml(folder.name)}</span><button type="button" class="draft-delete" data-delete-folder="${escapeHtml(folder.id)}">Delete</button></div>`).join('') || '<p class="muted">No custom folders yet.</p>';
+      document.getElementById('custom-folder-nav').innerHTML = (body.folders || []).map((folder) => `<button type="button" data-custom-folder="${escapeHtml(folder.id)}">↳ ${escapeHtml(folder.name)} <span class="folder-count">${folder.count || 0}</span></button>`).join('');
+      document.querySelectorAll('[data-custom-folder]').forEach((button) => {
+        button.addEventListener('click', () => showFolder(`custom:${button.dataset.customFolder}`));
+        button.addEventListener('dragover', (event) => event.preventDefault());
+        button.addEventListener('drop', async (event) => {
+          event.preventDefault();
+          const message = JSON.parse(event.dataTransfer.getData('application/x-n0jcg-message') || '{}');
+          if (!message.mid) return;
+          const response = await fetch(`/api/v1/mail/messages/${encodeURIComponent(message.mid)}/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder_id: button.dataset.customFolder, box: message.box }) });
+          if (!response.ok) { window.alert('The message could not be moved.'); return; }
+          await loadFolders();
+          showFolder(`custom:${button.dataset.customFolder}`);
+        });
+      });
       list.querySelectorAll('[data-delete-folder]').forEach((button) => button.addEventListener('click', async () => {
         if (!window.confirm('Delete this folder?')) return;
         const response = await fetch(`/api/v1/mail/folders/${encodeURIComponent(button.dataset.deleteFolder)}`, { method: 'DELETE' });

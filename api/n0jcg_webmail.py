@@ -68,6 +68,7 @@ def init_db():
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', state TEXT NOT NULL, created_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_folders (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(callsign,name))")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_folder_messages (callsign TEXT NOT NULL, folder_id INTEGER NOT NULL, box TEXT NOT NULL, mid TEXT NOT NULL, assigned_at INTEGER NOT NULL, PRIMARY KEY(callsign,folder_id,mid))")
         for table in ("mailbox_drafts", "mailbox_queue"):
             for column in ("attachment_name TEXT NOT NULL DEFAULT ''", "attachment_type TEXT NOT NULL DEFAULT ''", "attachment_data BLOB NOT NULL DEFAULT ''"):
                 try:
@@ -475,6 +476,29 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.send_json(HTTPStatus.OK, {"source": "local_queue", "created": True, "folder": {"id": int(cursor.lastrowid), "name": name, "created_at": now}})
                 return
+            if self.path.startswith("/api/v1/mail/messages/") and self.path.endswith("/move"):
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                parts = self.path.split("/")
+                if len(parts) != 7 or not re.fullmatch(r"[A-Za-z0-9._-]+", parts[5]):
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid message id"})
+                    return
+                folder_id = data.get("folder_id")
+                box = str(data.get("box") or "in")
+                if not str(folder_id).isdigit() or box not in {"in", "sent", "out", "archive"}:
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid destination folder"})
+                    return
+                with sqlite3.connect(DB_PATH) as db:
+                    owner = db.execute("SELECT 1 FROM mailbox_folders WHERE id=? AND callsign=?", (int(folder_id), session["callsign"])).fetchone()
+                    if not owner:
+                        self.send_json(HTTPStatus.NOT_FOUND, {"error": "folder not found"})
+                        return
+                    db.execute("INSERT OR REPLACE INTO mailbox_folder_messages(callsign,folder_id,box,mid,assigned_at) VALUES(?,?,?,?,?)", (session["callsign"], int(folder_id), box, parts[5], int(time.time())))
+                    db.commit()
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "moved": True, "folder_id": int(folder_id)})
+                return
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ValueError as exc:
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -506,12 +530,19 @@ class Handler(BaseHTTPRequestHandler):
                 path, _, query = self.path.partition("?")
                 params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
                 folder = params.get("folder", "inbox")
-                boxes = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}
-                box = boxes.get(folder)
-                if not box:
-                    raise ValueError("unknown mailbox folder")
                 prefix = "/api/v1/mail/messages/"
                 mid = path[len(prefix):] if path.startswith(prefix) else ""
+                boxes = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}
+                box = boxes.get(folder)
+                if folder.startswith("custom:"):
+                    custom_id = folder[7:]
+                    if not custom_id.isdigit():
+                        raise ValueError("invalid custom folder")
+                    with sqlite3.connect(DB_PATH) as db:
+                        row = db.execute("SELECT box FROM mailbox_folder_messages WHERE callsign=? AND folder_id=? AND mid=?", (session["callsign"], int(custom_id), mid)).fetchone()
+                    box = row[0] if row else None
+                if not box:
+                    raise ValueError("unknown mailbox folder")
                 if mid and ("/" in mid or not re.fullmatch(r"[A-Za-z0-9._-]+", mid)):
                     raise ValueError("invalid message id")
                 payload = pat_mailbox_request(session, box, mid or None)
@@ -551,7 +582,35 @@ class Handler(BaseHTTPRequestHandler):
                 return
             with sqlite3.connect(DB_PATH) as db:
                 rows = db.execute("SELECT id,name,created_at FROM mailbox_folders WHERE callsign=? ORDER BY name COLLATE NOCASE", (session["callsign"],)).fetchall()
-            self.send_json(HTTPStatus.OK, {"source": "local_queue", "folders": [{"id": row[0], "name": row[1], "created_at": row[2]} for row in rows]})
+            folders = []
+            for row in rows:
+                with sqlite3.connect(DB_PATH) as folder_db:
+                    count = folder_db.execute("SELECT COUNT(*) FROM mailbox_folder_messages WHERE callsign=? AND folder_id=?", (session["callsign"], row[0])).fetchone()[0]
+                folders.append({"id": row[0], "name": row[1], "created_at": row[2], "count": count})
+            self.send_json(HTTPStatus.OK, {"source": "local_queue", "folders": folders})
+            return
+        folder_message_prefix = "/api/v1/mail/folders/"
+        if self.path.startswith(folder_message_prefix) and self.path.endswith("/messages"):
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            folder_id = self.path[len(folder_message_prefix):-len("/messages")]
+            if not folder_id.isdigit():
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid folder id"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                owned = db.execute("SELECT 1 FROM mailbox_folders WHERE id=? AND callsign=?", (int(folder_id), session["callsign"])).fetchone()
+                assignments = db.execute("SELECT box,mid FROM mailbox_folder_messages WHERE callsign=? AND folder_id=? ORDER BY assigned_at DESC", (session["callsign"], int(folder_id))).fetchall()
+            if not owned:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "folder not found"})
+                return
+            messages = []
+            for box, mid in assignments:
+                try:
+                    messages.append(pat_mailbox_request(session, box, mid))
+                except RuntimeError:
+                    continue
+            self.send_json(HTTPStatus.OK, {"source": "pat", "state": "READY", "messages": messages})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -567,6 +626,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid folder id"})
                 return
             with sqlite3.connect(DB_PATH) as db:
+                db.execute("DELETE FROM mailbox_folder_messages WHERE folder_id=? AND callsign=?", (int(folder_id), session["callsign"]))
                 cursor = db.execute("DELETE FROM mailbox_folders WHERE id=? AND callsign=?", (int(folder_id), session["callsign"]))
                 db.commit()
             if cursor.rowcount == 0:
