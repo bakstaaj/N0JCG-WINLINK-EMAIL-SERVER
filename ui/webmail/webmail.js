@@ -338,6 +338,9 @@
   }
 
   document.getElementById('login-form').addEventListener('submit', submitAuth);
+  document.getElementById('show-password').addEventListener('change', (event) => {
+    document.getElementById('login-password').type = event.currentTarget.checked ? 'text' : 'password';
+  });
   logoutButton.addEventListener('click', logout);
   document.querySelector('[data-action="folders"]').addEventListener('click', showFolderManager);
   document.querySelector('[data-action="cancel-folders"]').addEventListener('click', () => showFolder('inbox'));

@@ -37,6 +37,8 @@
     .auth-form input:not([type="checkbox"]) { width:100%; padding:11px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
     .auth-form .consent { display:flex; grid-template-columns:none; align-items:start; gap:var(--n0-space-2); font-weight:400; }
     .auth-form .consent input { margin-top:.3rem; }
+    .password-toggle { display:flex !important; grid-template-columns:none; align-items:center; gap:var(--n0-space-2); font-weight:400 !important; }
+    .password-toggle input { width:auto !important; }
     .auth-message { min-height:1.5em; margin:0; color:var(--n0-color-warning); }
     .signature-view { display:grid; gap:var(--n0-space-4); }
     .signature-view textarea { width:100%; min-height:150px; padding:11px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; resize:vertical; }
@@ -79,7 +81,7 @@
     </section>
     <section id="auth-gate" class="card auth-gate" aria-labelledby="auth-title">
       <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in with Winlink</h2><p>Use your Winlink radio email address and secure-login password. A first login initializes an isolated Winlink mailbox for that callsign.</p></div>
-      <form id="login-form" class="auth-form"><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input name="password" type="password" autocomplete="current-password" required></label><button class="button" type="submit">Sign in</button><p class="auth-message" role="status"></p></form>
+      <form id="login-form" class="auth-form"><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input id="login-password" name="password" type="password" autocomplete="current-password" required></label><label class="password-toggle"><input id="show-password" type="checkbox"> Show password</label><button class="button" type="submit">Sign in</button><p class="auth-message" role="status"></p></form>
       <p class="muted">No separate webmail registration is required. Radio email ownership is proven only after the Winlink client completes a successful CMS or Packet transaction. Credentials are not displayed back in the UI.</p>
     </section>
     <section id="mail-workspace" class="mail-layout" aria-label="Webmail workspace" hidden>
