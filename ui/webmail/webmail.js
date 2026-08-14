@@ -12,8 +12,8 @@
   const logoutButton = document.getElementById('logout-button');
   let sessionTimer;
   const emptyCopy = {
-    inbox: ['No mailbox connection', 'Pat is installed but not connected to a Winlink mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
-    sent: ['No sent messages', 'Sent message history will appear here after the Pat mailbox is connected.'],
+    inbox: ['No mailbox connection', 'The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
+    sent: ['No sent messages', 'Sent message history will appear here after the Winlink mailbox is connected.'],
     drafts: ['No drafts', 'Drafts are stored locally only until the mailbox API is connected.'],
     queue: ['Send queue is empty', 'Messages queued for Packet transmission will appear here with delivery state and retry evidence.']
   };
@@ -329,7 +329,7 @@
       const response = await fetch('/api/v1/mail/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body, attachment }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Message could not be queued.');
-      window.alert('Message queued locally. Transmission remains disabled until the Pat/Packet path is verified.');
+      window.alert('Message queued locally. Transmission remains disabled until the Winlink/Packet path is verified.');
       composeView.removeAttribute('data-draft-id');
       showFolder('queue');
     } catch (error) { window.alert(error.message); }

@@ -74,9 +74,9 @@
       <div class="status-badge status-unavailable" role="status"><span aria-hidden="true">!</span> Mailbox: Not connected</div>
     </section>
     <section id="auth-gate" class="card auth-gate" aria-labelledby="auth-title">
-      <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in with Winlink</h2><p>Use your Winlink radio email address and secure-login password. A first login initializes an isolated Pat mailbox for that callsign.</p></div>
+      <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in with Winlink</h2><p>Use your Winlink radio email address and secure-login password. A first login initializes an isolated Winlink mailbox for that callsign.</p></div>
       <form id="login-form" class="auth-form"><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input name="password" type="password" autocomplete="current-password" required></label><button class="button" type="submit">Sign in</button><p class="auth-message" role="status"></p></form>
-      <p class="muted">No separate webmail registration is required. Radio email ownership is proven only after Pat completes a successful Winlink CMS or Packet transaction. Credentials are not displayed back in the UI.</p>
+      <p class="muted">No separate webmail registration is required. Radio email ownership is proven only after the Winlink client completes a successful CMS or Packet transaction. Credentials are not displayed back in the UI.</p>
     </section>
     <section id="mail-workspace" class="mail-layout" aria-label="Webmail workspace" hidden>
       <nav class="mail-nav" aria-label="Mailbox folders">
@@ -88,14 +88,14 @@
       </nav>
       <section class="card mail-panel" aria-live="polite">
         <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="signature">Signature</button> <button type="button" data-action="refresh">Refresh</button> <button type="button" data-action="compose">New message</button></div></div>
-        <div id="folder-view" class="mail-empty"><strong>No mailbox connection</strong><p>Pat is installed but not connected to a Winlink mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.</p></div>
+        <div id="folder-view" class="mail-empty"><strong>No mailbox connection</strong><p>The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.</p></div>
         <form id="signature-view" class="signature-view" hidden><h3>Email signature</h3><p class="muted">This signature is saved separately for your authenticated Winlink callsign and added to new messages.</p><textarea name="signature" maxlength="2000" placeholder="73,\nYOURCALL"></textarea><p class="auth-message" role="status"></p><div class="compose-actions"><button type="submit">Save signature</button><button type="button" class="secondary" data-action="cancel-signature">Cancel</button></div></form>
         <form id="compose-view" class="compose" hidden>
           <label>To<input name="to" type="email" autocomplete="email" placeholder="recipient@example.net" required></label>
           <label>Subject<input name="subject" maxlength="160" required></label>
           <label>Message<textarea name="body" maxlength="10000" required></textarea></label>
           <label>Attachment<input name="attachment" type="file" accept="*/*"><small id="attachment-warning" class="attachment-warning" role="status"></small></label>
-          <p class="muted">Sending remains disabled until the Pat mailbox and Packet RMS path are verified.</p>
+          <p class="muted">Sending remains disabled until the Winlink mailbox and Packet RMS path are verified.</p>
           <div class="compose-actions"><button type="submit">Queue message</button><button type="button" class="secondary" data-action="save-draft">Save draft</button><button type="button" class="secondary" data-action="cancel-compose">Cancel</button></div>
         </form>
       </section>
