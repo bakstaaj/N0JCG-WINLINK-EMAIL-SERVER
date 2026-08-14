@@ -13,3 +13,21 @@ h1, h2, p { margin-top: 0; } h1 { margin-bottom: var(--n0-space-2); color: var(-
 .next-step { display: flex; align-items: center; justify-content: space-between; gap: var(--n0-space-6); margin-top: var(--n0-space-6); border-left: 4px solid var(--n0-color-cyan); } .next-step p:last-child { margin-bottom: 0; color: var(--n0-color-text-muted); } .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 var(--n0-space-4); color: var(--n0-color-white); background: var(--n0-color-blue); border-radius: var(--n0-radius-sm); font-weight: 700; text-decoration: none; } .button:hover { background: var(--n0-color-navy); } .button:focus-visible { outline: 0; box-shadow: var(--n0-focus-ring); }
 #diagnostics { margin-top: var(--n0-space-6); } .checklist { display: grid; gap: var(--n0-space-4); margin: 0; padding: 0; list-style: none; } .checklist li { display: flex; align-items: start; gap: var(--n0-space-3); } .check-icon { display: grid; width: 28px; height: 28px; flex: 0 0 28px; place-items: center; color: var(--n0-color-blue); border: 1px solid var(--n0-color-blue); border-radius: 50%; font-family: var(--n0-font-mono); font-size: 0.8rem; } .checklist strong, .checklist small { display: block; } .checklist small { color: var(--n0-color-text-muted); } .footer { padding: var(--n0-space-6); color: var(--n0-color-text-muted); text-align: center; font-size: 0.85rem; }
 @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } .intro, .next-step { align-items: start; flex-direction: column; } .header-context { display: none; } } @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+@media (max-width: 800px) {
+  .app-header { min-height: 64px; padding: 12px 16px; flex-wrap: wrap; }
+  .brand-lockup { gap: 10px; min-width: 0; }
+  .brand-mark { width: 132px; }
+  .product-name { padding-left: 10px; font-size: .76rem; }
+  .header-context { display: flex; flex-wrap: wrap; gap: 8px; }
+  .shell { width: min(100% - 24px, 1200px); padding: 24px 0; }
+  .card { padding: 18px; }
+}
+@media (max-width: 480px) {
+  .app-header { align-items: flex-start; }
+  .brand-mark { width: 112px; }
+  .product-name { font-size: .68rem; letter-spacing: 0; }
+  .header-context .mono { display: none; }
+  h1 { font-size: 1.75rem; }
+  .intro { gap: 12px; margin-bottom: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

@@ -8,13 +8,16 @@ APP_USER="${N0JCG_APP_USER:-${SUDO_USER:-pi}}"
 NGINX_SITE="/etc/nginx/sites-available/n0jcg-winlink.conf"
 NGINX_ENABLED="/etc/nginx/sites-enabled/n0jcg-winlink.conf"
 CONFIGURE_OPERATOR_AUTH=0
+CONFIGURE_CONNECTIVITY=0
 
-if [[ "${1:-}" == "--configure-operator-auth" ]]; then
-    CONFIGURE_OPERATOR_AUTH=1
-elif [[ -n "${1:-}" && "${1:-}" != "--check-only" ]]; then
-    echo "FAIL: unknown option: $1" >&2
-    exit 1
-fi
+for option in "$@"; do
+    case "$option" in
+        --configure-operator-auth) CONFIGURE_OPERATOR_AUTH=1 ;;
+        --configure-connectivity) CONFIGURE_CONNECTIVITY=1 ;;
+        --check-only) ;;
+        *) echo "FAIL: unknown option: $option" >&2; exit 1 ;;
+    esac
+done
 
 if [[ ! -f "$REPO_ROOT/ui/index.html" || ! -f "$REPO_ROOT/branding/tokens.css" ]]; then
     echo "FAIL: run this installer from the N0JCG-WINLINK-EMAIL-SERVER source tree" >&2
@@ -28,6 +31,9 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/ui/webmail/index.html"
     test -f "$REPO_ROOT/ui/webmail/webmail.js"
     test -f "$REPO_ROOT/api/n0jcg_webmail.py"
+    test -f "$REPO_ROOT/deploy/setup_connectivity.sh"
+    test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh"
+    test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
     test -f "$REPO_ROOT/branding/tokens.css"
     test -f "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg"
     echo "PASS: static UI source and brand assets are present"
@@ -52,6 +58,11 @@ sudo install -m 0755 "$REPO_ROOT/api/n0jcg_webmail.py" "$APP_ROOT/api/n0jcg_webm
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-webmail.service" | sudo tee /etc/systemd/system/n0jcg-webmail.service >/dev/null
 sudo chown -R "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink-webmail
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_operator_auth.sh" "$APP_ROOT/tools/setup_operator_auth.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/setup_connectivity.sh" "$APP_ROOT/tools/setup_connectivity.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" "$APP_ROOT/tools/n0jcg-usb-gadget.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/tools/n0jcg-network-fallback.sh"
+sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
+sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"
 if [[ ! -f /etc/nginx/snippets/n0jcg-winlink-auth.conf.optional ]]; then
     printf 'auth_basic off;\n' | sudo tee /etc/nginx/snippets/n0jcg-winlink-auth.conf.optional >/dev/null
@@ -67,6 +78,16 @@ if ! grep -q 'PAT_TELNET_URL' "$APP_ROOT/api/n0jcg_webmail.py"; then
     exit 1
 fi
 echo "PASS: webmail service restarted with current API revision"
+
+if [[ "$CONFIGURE_CONNECTIVITY" == "1" ]]; then
+    if [[ -n "${N0JCG_CONNECTIVITY_ENV:-}" ]]; then
+        sudo env N0JCG_CONNECTIVITY_ENV="$N0JCG_CONNECTIVITY_ENV" bash "$APP_ROOT/tools/setup_connectivity.sh"
+    else
+        sudo bash "$APP_ROOT/tools/setup_connectivity.sh"
+    fi
+else
+    echo "INFO: Wi-Fi/USB gadget setup not changed; rerun with --configure-connectivity to configure it."
+fi
 
 if [[ ! -f /etc/nginx/.htpasswd-n0jcg-winlink || "$CONFIGURE_OPERATOR_AUTH" == "1" ]]; then
     if ! command -v htpasswd >/dev/null 2>&1; then

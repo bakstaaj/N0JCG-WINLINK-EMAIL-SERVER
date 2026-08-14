@@ -79,6 +79,18 @@ For a repeatable deployment, provide the address and username directly:
 
 The installer then asks for the Nginx operator-console username and password. The password is entered twice so a typing error is caught during the initial setup. Keep the operator credentials separate from the Winlink mailbox password.
 
+### Configure Wi-Fi, hotspot fallback, and USB gadget
+
+To configure connectivity during deployment, add `--configure-connectivity`:
+
+```bash
+./deploy/push_to_pi.sh 192.168.68.149 pi --configure-connectivity
+```
+
+The helper prompts for the preferred Wi-Fi SSID/password and confirms the fallback hotspot password. The Pi uses Wi-Fi when it receives a DHCP address. If Wi-Fi cannot connect, NetworkManager activates the secured `N0JCG-WINLINK-SETUP` hotspot with DHCP at `192.168.50.1`.
+
+The Pi 4 USB Ethernet gadget is also installed. Connect a computer to the Pi 4 USB-C power/data port—not a blue USB host port—to reach the appliance directly at `192.168.77.1`.
+
 ### Optional repeat deployment
 
 Existing operator authentication is preserved during normal upgrades. To intentionally reconfigure the operator account:
@@ -143,11 +155,12 @@ After the software and account setup are complete:
 1. Power off the radio and Raspberry Pi before changing audio/PTT cabling.
 2. Connect the DigiRig Mobile to the radio using the correct radio-specific cables.
 3. Connect the DigiRig Mobile directly to a Raspberry Pi USB 3 port or a powered USB hub.
-4. Power the radio, DigiRig Mobile, and Raspberry Pi.
-5. Confirm that the operator console reports the expected USB/audio/serial devices as **Detected**.
-6. Configure the radio profile, audio levels, PTT method, and selected Packet RMS gateway.
-7. Perform receive-only checks before enabling any transmit behavior.
-8. Enable transmission only after the operator has verified the radio path and local regulations.
+4. Keep the Pi 4 USB-C power/data port available for the USB Ethernet gadget; it is not a DigiRig host port.
+5. Power the radio, DigiRig Mobile, and Raspberry Pi.
+6. Confirm that the operator console reports the expected USB/audio/serial devices as **Detected**.
+7. Configure the radio profile, audio levels, PTT method, and selected Packet RMS gateway.
+8. Perform receive-only checks before enabling any transmit behavior.
+9. Enable transmission only after the operator has verified the radio path and local regulations.
 
 ## 6. Troubleshooting
 

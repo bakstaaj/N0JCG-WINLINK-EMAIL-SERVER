@@ -1,0 +1,13 @@
+[Unit]
+Description=N0JCG Wi-Fi DHCP and local hotspot fallback
+After=NetworkManager.service n0jcg-usb-gadget.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/n0jcg-network-fallback.sh --watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
