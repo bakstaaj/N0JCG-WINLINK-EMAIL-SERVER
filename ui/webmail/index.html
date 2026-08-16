@@ -62,6 +62,14 @@
     .message-detail button.danger { background:#9b2c2c; }
     .attachment-warning { min-height:1.3em; color:var(--n0-color-warning); font-weight:600; }
     .folder-manager { display:grid; gap:var(--n0-space-4); }
+    .template-view { display:grid; gap:var(--n0-space-4); }
+    .template-list { display:grid; gap:var(--n0-space-2); max-height:420px; overflow:auto; }
+    .template-choice { display:grid; gap:3px; padding:12px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); color:var(--n0-color-navy); background:var(--n0-color-white); text-align:left; font:inherit; cursor:pointer; }
+    .template-choice:hover { border-color:var(--n0-color-blue); background:var(--n0-color-mist); }
+    .template-choice small { color:var(--n0-color-text-muted); }
+    .template-fields { display:grid; gap:var(--n0-space-3); }
+    .template-fields label { display:grid; gap:var(--n0-space-2); color:var(--n0-color-text-muted); font-size:.85rem; font-weight:700; }
+    .template-fields input { padding:10px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
     .folder-manager form { display:flex; gap:var(--n0-space-2); }
     .folder-manager input { flex:1; padding:10px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
     .custom-folder-row { display:flex; align-items:center; justify-content:space-between; gap:var(--n0-space-3); padding:10px 0; border-top:1px solid #e9edf2; }
@@ -99,10 +107,11 @@
         <button data-action="folders">Manage folders</button>
       </nav>
       <section class="card mail-panel" aria-live="polite">
-        <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="signature">Signature</button> <button type="button" data-action="refresh">Refresh</button> <button type="button" data-action="compose">New message</button></div></div>
+        <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="templates">Templates</button> <button type="button" data-action="signature">Signature</button> <button type="button" data-action="refresh">Refresh</button> <button type="button" data-action="compose">New message</button></div></div>
         <div id="folder-view" class="mail-empty"><strong>No mailbox connection</strong><p>The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.</p></div>
         <form id="signature-view" class="signature-view" hidden><h3>Email signature</h3><p class="muted">This signature is saved separately for your authenticated Winlink callsign and added to new messages.</p><textarea name="signature" maxlength="2000" placeholder="73,\nYOURCALL"></textarea><p class="auth-message" role="status"></p><div class="compose-actions"><button type="submit">Save signature</button><button type="button" class="secondary" data-action="cancel-signature">Cancel</button></div></form>
         <section id="folder-manager" class="folder-manager" hidden><h3>Manage folders</h3><p class="muted">Create folders for this Winlink account. Built-in mailbox folders cannot be deleted.</p><form id="folder-form"><input name="name" maxlength="40" placeholder="Folder name" required><button type="submit">Create folder</button></form><p id="folder-message" class="auth-message" role="status"></p><div id="custom-folder-list"></div><button type="button" class="secondary" data-action="cancel-folders">Done</button></section>
+        <section id="template-view" class="template-view" hidden><h3>Winlink Standard Forms</h3><p class="muted">Choose an official form, complete its fields, and insert an editable plain-text message. The operator must install or update the Standard Forms library first.</p><div id="template-content" class="mail-empty">Loading templates…</div><button type="button" class="secondary" data-action="cancel-templates">Done</button></section>
         <form id="compose-view" class="compose" hidden>
           <label>To<input name="to" type="email" autocomplete="email" placeholder="recipient@example.net" required></label>
           <label>Subject<input name="subject" maxlength="160" required></label>

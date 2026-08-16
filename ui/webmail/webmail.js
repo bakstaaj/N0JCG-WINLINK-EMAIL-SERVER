@@ -6,6 +6,7 @@
   const signatureView = document.getElementById('signature-view');
   const signatureForm = signatureView;
   const folderManager = document.getElementById('folder-manager');
+  const templateView = document.getElementById('template-view');
   let signature = '';
   const authGate = document.getElementById('auth-gate');
   const workspace = document.getElementById('mail-workspace');
@@ -40,6 +41,7 @@
     composeView.hidden = true;
     signatureView.hidden = true;
     folderManager.hidden = true;
+    templateView.hidden = true;
     document.querySelectorAll('[data-folder]').forEach((button) => button.classList.toggle('active', button.dataset.folder === folder));
     loadMessages(folder);
   }
@@ -121,6 +123,7 @@
     folderView.hidden = true;
     signatureView.hidden = true;
     folderManager.hidden = true;
+    templateView.hidden = true;
     composeView.hidden = false;
     folderTitle.textContent = 'Edit draft';
     composeView.querySelector('input[name="to"]').value = draft.recipient || '';
@@ -162,6 +165,8 @@
     folderView.hidden = true;
     composeView.hidden = false;
     signatureView.hidden = true;
+    folderManager.hidden = true;
+    templateView.hidden = true;
     folderTitle.textContent = 'New message';
     composeView.removeAttribute('data-draft-id');
     composeView.querySelector('input[name="to"]').value = '';
@@ -220,6 +225,7 @@
     composeView.hidden = true;
     signatureView.hidden = false;
     folderManager.hidden = true;
+    templateView.hidden = true;
     signatureForm.querySelector('textarea').value = signature;
     signatureForm.querySelector('.auth-message').textContent = '';
     try {
@@ -233,11 +239,52 @@
     }
   }
 
+  async function showTemplates() {
+    folderView.hidden = true;
+    composeView.hidden = true;
+    signatureView.hidden = true;
+    folderManager.hidden = true;
+    templateView.hidden = false;
+    folderTitle.textContent = 'Templates';
+    const content = document.getElementById('template-content');
+    content.innerHTML = '<p>Loading official Standard Forms…</p>';
+    try {
+      const response = await fetch('/api/v1/templates', { cache: 'no-store' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Standard Forms are unavailable.');
+      const templates = body.templates || [];
+      content.innerHTML = templates.length ? `<div class="template-list">${templates.map((item) => `<button class="template-choice" type="button" data-template-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.category)} · ${item.fields.length} fields</small></button>`).join('')}</div><p class="muted">Library version ${escapeHtml(body.version)} · ${templates.length} forms</p>` : '<strong>No plain-text form descriptors found</strong>';
+      content.querySelectorAll('[data-template-id]').forEach((button) => button.addEventListener('click', () => showTemplateFields(templates.find((item) => item.id === button.dataset.templateId))));
+    } catch (error) { content.innerHTML = `<strong>Templates unavailable</strong><p>${escapeHtml(error.message)}</p>`; }
+  }
+
+  function showTemplateFields(template) {
+    if (!template) return;
+    const content = document.getElementById('template-content');
+    content.innerHTML = `<h4>${escapeHtml(template.name)}</h4><p class="muted">${escapeHtml(template.category)} · Standard Forms ${escapeHtml(template.version)}</p><div class="template-fields">${template.fields.map((field) => `<label>${escapeHtml(field)}<input data-template-field="${escapeHtml(field)}" autocomplete="off"></label>`).join('')}</div><p class="auth-message" id="template-message" role="status"></p><div class="compose-actions"><button type="button" data-action="use-template">Insert into message</button><button type="button" class="secondary" data-action="back-templates">Back to templates</button></div>`;
+    content.querySelector('[data-action="use-template"]').addEventListener('click', async () => {
+      const values = {};
+      content.querySelectorAll('[data-template-field]').forEach((input) => { values[input.dataset.templateField] = input.value; });
+      const message = document.getElementById('template-message');
+      try {
+        const response = await fetch('/api/v1/templates/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: template.id, values }) });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || 'Template could not be rendered.');
+        showCompose();
+        form.querySelector('input[name="to"]').value = body.recipient || '';
+        form.querySelector('input[name="subject"]').value = body.subject || '';
+        form.querySelector('textarea[name="body"]').value = body.body || '';
+      } catch (error) { message.textContent = error.message; }
+    });
+    content.querySelector('[data-action="back-templates"]').addEventListener('click', showTemplates);
+  }
+
   async function showFolderManager() {
     folderView.hidden = true;
     composeView.hidden = true;
     signatureView.hidden = true;
     folderManager.hidden = false;
+    templateView.hidden = true;
     await loadFolders();
   }
 
@@ -371,6 +418,8 @@
   });
   logoutButton.addEventListener('click', logout);
   document.querySelector('[data-action="folders"]').addEventListener('click', showFolderManager);
+  document.querySelector('[data-action="templates"]').addEventListener('click', showTemplates);
+  document.querySelector('[data-action="cancel-templates"]').addEventListener('click', () => showFolder('inbox'));
   document.querySelector('[data-action="cancel-folders"]').addEventListener('click', () => showFolder('inbox'));
   document.getElementById('folder-form').addEventListener('submit', async (event) => {
     event.preventDefault();

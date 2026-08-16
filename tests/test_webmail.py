@@ -1,5 +1,6 @@
 import base64
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("n0jcg_webmail", ROOT / "api" / "n0jcg_webmail.py")
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+TEMPLATE_SPEC = importlib.util.spec_from_file_location("winlink_templates", ROOT / "api" / "winlink_templates.py")
+TEMPLATE_MODULE = importlib.util.module_from_spec(TEMPLATE_SPEC)
+TEMPLATE_SPEC.loader.exec_module(TEMPLATE_MODULE)
 
 
 class WebmailHelpersTests(unittest.TestCase):
@@ -45,6 +49,20 @@ class WebmailHelpersTests(unittest.TestCase):
             MODULE.folder_name("Inbox")
         with self.assertRaises(ValueError):
             MODULE.folder_name("bad/name")
+
+    def test_standard_form_descriptor_renders_plain_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            library = root / "standard" / "1.0.0"
+            library.mkdir(parents=True)
+            (root / "standard" / "current.json").write_text('{"version":"1.0.0"}', encoding="utf-8")
+            (library / "Test.txt").write_text("Form: Test.html\nTo: <var recipient>\nSubject: Test <var subject>\n\nMsg:\nHello <var name>\nFrom <var MsgSender>", encoding="utf-8")
+            catalog = TEMPLATE_MODULE.catalog(root)
+            self.assertEqual(catalog["templates"][0]["fields"], ["subject", "recipient", "name"])
+            rendered = TEMPLATE_MODULE.render("Test", {"recipient": "N0JCG@winlink.org", "subject": "Status", "name": "Operator"}, "N0JCG", root)
+            self.assertEqual(rendered["recipient"], "N0JCG@winlink.org")
+            self.assertIn("Hello Operator", rendered["body"])
+            self.assertIn("From N0JCG", rendered["body"])
 
 
 if __name__ == "__main__":

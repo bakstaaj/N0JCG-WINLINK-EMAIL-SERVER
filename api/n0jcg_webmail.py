@@ -18,6 +18,7 @@ import socket
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -26,6 +27,16 @@ import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+try:
+    from winlink_templates import catalog as template_catalog
+    from winlink_templates import render as render_template
+    from winlink_templates import update_library as update_template_library
+except ModuleNotFoundError:  # direct import by the repository test loader
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from winlink_templates import catalog as template_catalog
+    from winlink_templates import render as render_template
+    from winlink_templates import update_library as update_template_library
 
 
 HOST = os.environ.get("N0JCG_WEBMAIL_HOST", "127.0.0.1")
@@ -241,6 +252,7 @@ def operator_diagnostics():
     for label, pattern in (("audio", "/dev/snd"), ("serial", "/dev/digirig-serial"), ("ptt", "/dev/digirig-ptt")):
         path = Path(pattern)
         devices[label] = {"path": pattern, "present": path.exists()}
+    templates = template_catalog()
     return {
         "source": "local_probe",
         "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -248,6 +260,7 @@ def operator_diagnostics():
         "services": {"webmail": service_state("n0jcg-webmail.service"), "pat": service_state("pat@pi.service"), "direwolf": service_state("direwolf.service")},
         "binaries": {"pat": bool(shutil.which("pat-winlink") or shutil.which("pat")), "direwolf": bool(shutil.which("direwolf"))},
         "devices": devices,
+        "standard_forms": {"available": bool(templates.get("available")), "version": templates.get("version", ""), "count": len(templates.get("templates", []))},
     }
 
 
@@ -394,6 +407,18 @@ class Handler(BaseHTTPRequestHandler):
                         SESSIONS.pop(session["token"], None)
                 self.send_json(HTTPStatus.OK, {"authenticated": False}, "n0jcg_webmail_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
                 return
+            if self.path == "/api/v1/operator/templates/update":
+                payload = update_template_library()
+                self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", "updated": True, **payload})
+                return
+            if self.path == "/api/v1/templates/render":
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                rendered = render_template(str(data.get("template_id") or ""), data.get("values") or {}, session["callsign"])
+                self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", **rendered})
+                return
             if self.path.startswith("/api/v1/mail/messages/") and self.path.endswith("/read"):
                 session = session_from(self)
                 if not session:
@@ -527,6 +552,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
             else:
                 self.send_json(HTTPStatus.OK, {"authenticated": True, "mailbox": session["email"], "callsign": session["callsign"], "source": "pat", "state": "AUTHENTICATED", "message_access": "pending_pat_mailbox_api"})
+            return
+        if self.path == "/api/v1/templates":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            payload = template_catalog()
+            if not payload.get("available"):
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Standard Forms have not been installed by the operator yet.", "source": "winlink_standard_forms", "available": False})
+                return
+            self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", **payload})
             return
         if self.path.startswith("/api/v1/mail/messages"):
             if not session:

@@ -40,6 +40,22 @@ The backend must:
 The mailbox API must use the authenticated session identity and its isolated Pat mailbox when calling Pat;
 the browser must not select an arbitrary mailbox or callsign in a message URL.
 
+## Standard Forms
+
+The operator can install or update the official Winlink Standard Forms library
+from the Pi with:
+
+```bash
+sudo /opt/n0jcg-winlink/tools/update_standard_forms.sh
+```
+
+After installation, users can open **Templates** in Webmail, choose a form,
+complete its fields, and insert the generated plain-text message into Compose.
+The catalog keeps the official version and category metadata and substitutes
+the signed-in callsign plus UTC date/time fields. The original HTML/JavaScript
+form files are retained for future sandboxed rendering; they are not executed
+inside the authenticated WES page.
+
 The login endpoint permits five failed attempts per client address within a
 15-minute window. A successful Winlink authentication clears that client's
 failure window; rate-limited responses include `Retry-After` and do not reveal

@@ -32,6 +32,7 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/ui/webmail/index.html"
     test -f "$REPO_ROOT/ui/webmail/webmail.js"
     test -f "$REPO_ROOT/api/n0jcg_webmail.py"
+    test -f "$REPO_ROOT/api/winlink_templates.py"
     test -f "$REPO_ROOT/deploy/setup_connectivity.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
@@ -60,12 +61,14 @@ sudo install -m 0644 "$REPO_ROOT/assets/brand/N0JCG_Header_Dark_Approved.png" "$
 sudo install -m 0644 "$REPO_ROOT/config/registration.example.json" "$APP_ROOT/config/registration.example.json"
 sudo install -m 0755 "$REPO_ROOT/tools/registration.py" "$APP_ROOT/tools/registration.py"
 sudo install -m 0755 "$REPO_ROOT/api/n0jcg_webmail.py" "$APP_ROOT/api/n0jcg_webmail.py"
+sudo install -m 0644 "$REPO_ROOT/api/winlink_templates.py" "$APP_ROOT/api/winlink_templates.py"
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-webmail.service" | sudo tee /etc/systemd/system/n0jcg-webmail.service >/dev/null
 sudo chown -R "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink-webmail
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_operator_auth.sh" "$APP_ROOT/tools/setup_operator_auth.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_connectivity.sh" "$APP_ROOT/tools/setup_connectivity.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" "$APP_ROOT/tools/n0jcg-usb-gadget.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/tools/n0jcg-network-fallback.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"

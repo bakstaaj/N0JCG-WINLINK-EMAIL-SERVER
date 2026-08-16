@@ -43,6 +43,20 @@ Use `N0JCG` exactly as written. Use **N0JCG Winlink Email Server** on visible pr
 
 The web server listens on HTTP port 80. Open `/` for the webmail redirect, `/webmail/` for user mail, or `/ui/` for the password-protected operator console.
 
+### Winlink Standard Forms
+
+The operator can install the current official Standard Forms archive after
+deployment:
+
+```bash
+sudo /opt/n0jcg-winlink/tools/update_standard_forms.sh
+```
+
+Authenticated Webmail users can then select **Templates** and insert supported
+plain-text form messages into Compose. WES preserves the official archive by
+version, while HTML/JavaScript forms remain inactive until a separate sandboxed
+viewer is implemented.
+
 ## Validation
 
 Run the dependency-free scaffold check with:
