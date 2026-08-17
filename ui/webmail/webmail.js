@@ -253,8 +253,19 @@
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Standard Forms are unavailable.');
       const templates = body.templates || [];
-      content.innerHTML = templates.length ? `<div class="template-list">${templates.map((item) => `<button class="template-choice" type="button" data-template-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.category)} · ${item.fields.length} fields</small></button>`).join('')}</div><p class="muted">Library version ${escapeHtml(body.version)} · ${templates.length} forms</p>` : '<strong>No plain-text form descriptors found</strong>';
-      content.querySelectorAll('[data-template-id]').forEach((button) => button.addEventListener('click', () => showTemplateFields(templates.find((item) => item.id === button.dataset.templateId))));
+      const categories = [...new Set(templates.map((item) => item.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      content.innerHTML = `<div class="template-filters"><input id="template-search" type="search" placeholder="Search forms" aria-label="Search Standard Forms"><select id="template-category" aria-label="Filter by category"><option value="">All categories</option>${categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}</select></div><div id="template-results"></div>`;
+      const results = document.getElementById('template-results');
+      const renderList = () => {
+        const query = document.getElementById('template-search').value.trim().toLowerCase();
+        const category = document.getElementById('template-category').value;
+        const filtered = templates.filter((item) => (!category || item.category === category) && (!query || `${item.name} ${item.category} ${item.id}`.toLowerCase().includes(query)));
+        results.innerHTML = filtered.length ? `<div class="template-list">${filtered.map((item) => `<button class="template-choice" type="button" data-template-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.category)} · ${item.fields.length} fields</small></button>`).join('')}</div><p class="muted">Showing ${filtered.length} of ${templates.length} forms · Library version ${escapeHtml(body.version)}</p>` : '<div class="mail-empty"><strong>No matching forms</strong><p>Try a different search or category.</p></div>';
+        results.querySelectorAll('[data-template-id]').forEach((button) => button.addEventListener('click', () => showTemplateFields(templates.find((item) => item.id === button.dataset.templateId))));
+      };
+      document.getElementById('template-search').addEventListener('input', renderList);
+      document.getElementById('template-category').addEventListener('change', renderList);
+      renderList();
     } catch (error) { content.innerHTML = `<strong>Templates unavailable</strong><p>${escapeHtml(error.message)}</p>`; }
   }
 
