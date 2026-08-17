@@ -53,7 +53,7 @@ PAT_BASE_CONFIG = os.environ.get("N0JCG_PAT_BASE_CONFIG", "")
 DB_PATH = STATE_DIR / "webmail.sqlite3"
 EMAIL_RE = re.compile(r"^([A-Z0-9][A-Z0-9-]{2,15})@winlink\.org$", re.I)
 FAILURE_RE = re.compile(r"secure login failed|authentication failed|login failed|invalid password|unknown callsign", re.I)
-SUCCESS_RE = re.compile(r"CMS>|Connected to|Remote accepted|Connected", re.I)
+SUCCESS_RE = re.compile(r"CMS>|WL2K-|Remote accepted|B2F", re.I)
 SESSIONS = {}
 LOCK = threading.RLock()
 LOGIN_ATTEMPTS = {}
@@ -121,7 +121,9 @@ def write_pat_config(callsign, password, destination):
         raise RuntimeError("Pat configuration is not a JSON object")
     if "telnet" not in config:
         raise RuntimeError("Pat telnet profile is missing; run Pat configuration once before using webmail")
-    config["mycall"] = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
+    # Pat's mycall is the Winlink mailbox identity. The local packet SSID is
+    # an RF station setting and must not replace the logged-in mailbox call.
+    config["mycall"] = callsign
     config["secure_login_password"] = password
     with destination.open("w", encoding="utf-8") as handle:
         json.dump(config, handle)
@@ -156,7 +158,7 @@ def pat_validate(callsign, password):
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
         connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
-        station_call = PAT_PACKET_CALLSIGN if connect_url.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
+        station_call = callsign
         command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "connect", connect_url]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": station_call, "PAT_SECURE_LOGIN_PASSWORD": password})
@@ -172,7 +174,7 @@ def pat_validate(callsign, password):
         if result.returncode != 0:
             return False, pat_failure_detail(output, result.returncode, password)
         if not SUCCESS_RE.search(output):
-            return False, "Pat returned no recognizable Winlink authentication evidence."
+            return False, "AX.25 connected, but Pat did not begin the Winlink mailbox exchange."
         transport = "Packet RMS" if connect_url.startswith("ax25") else "Winlink CMS"
         return True, f"{transport} authentication succeeded; isolated Pat mailbox initialized."
     except subprocess.TimeoutExpired:
@@ -197,7 +199,7 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        station_call = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else session["callsign"]
+        station_call = session["callsign"]
         command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "--listen", "telnet", "--addr", f"127.0.0.1:{port}", "http"]
         try:
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
