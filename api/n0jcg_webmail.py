@@ -408,7 +408,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.OK, {"authenticated": False}, "n0jcg_webmail_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
                 return
             if self.path == "/api/v1/operator/templates/update":
-                payload = update_template_library()
+                try:
+                    payload = update_template_library()
+                except RuntimeError as exc:
+                    self.send_json(HTTPStatus.BAD_GATEWAY, {"error": str(exc), "source": "winlink_standard_forms"})
+                    return
                 self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", "updated": True, **payload})
                 return
             if self.path == "/api/v1/templates/render":

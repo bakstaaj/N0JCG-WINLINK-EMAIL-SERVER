@@ -13,6 +13,7 @@ import re
 import shutil
 import tempfile
 import urllib.request
+import urllib.error
 import zipfile
 from pathlib import Path
 
@@ -51,7 +52,14 @@ def update_library(url=STANDARD_FORMS_URL, root=TEMPLATES_ROOT):
     root.mkdir(mode=0o750, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="n0jcg-standard-forms-") as work:
         archive_path = Path(work) / "Standard_Forms.zip"
-        urllib.request.urlretrieve(url, archive_path)
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (N0JCG-WES Standard Forms updater)"})
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response, archive_path.open("wb") as output:
+                shutil.copyfileobj(response, output)
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(f"Standard Forms download was rejected by the source server (HTTP {exc.code}).") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Standard Forms download failed: {exc.reason}") from exc
         unpacked = Path(work) / "unpacked"
         unpacked.mkdir()
         with zipfile.ZipFile(archive_path) as archive:
