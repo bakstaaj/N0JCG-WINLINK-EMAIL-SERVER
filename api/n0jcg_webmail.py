@@ -121,9 +121,22 @@ def write_pat_config(callsign, password, destination):
         raise RuntimeError("Pat configuration is not a JSON object")
     if "telnet" not in config:
         raise RuntimeError("Pat telnet profile is missing; run Pat configuration once before using webmail")
-    # Pat's mycall is the Winlink mailbox identity. The local packet SSID is
-    # an RF station setting and must not replace the logged-in mailbox call.
-    config["mycall"] = callsign
+    # Keep the RF AX.25 source identity separate from the logged-in Winlink
+    # mailbox. Pat supports auxiliary callsigns as CALLSIGN:PASSWORD entries.
+    # This lets the packet station use its configured SSID while secure login
+    # is still performed for the mailbox call entered by the user.
+    packet_call = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
+    config["mycall"] = packet_call
+    if packet_call.upper() != callsign.upper():
+        auxiliary = config.get("auxiliary_addresses")
+        if not isinstance(auxiliary, list):
+            auxiliary = []
+        auxiliary = [
+            entry for entry in auxiliary
+            if not (isinstance(entry, str) and entry.split(":", 1)[0].upper() == callsign.upper())
+        ]
+        auxiliary.append(f"{callsign}:{password}")
+        config["auxiliary_addresses"] = auxiliary
     config["secure_login_password"] = password
     with destination.open("w", encoding="utf-8") as handle:
         json.dump(config, handle)
@@ -158,7 +171,7 @@ def pat_validate(callsign, password):
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
         connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
-        station_call = callsign
+        station_call = PAT_PACKET_CALLSIGN if connect_url.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
         command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "connect", connect_url]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": station_call, "PAT_SECURE_LOGIN_PASSWORD": password})
@@ -199,7 +212,7 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        station_call = session["callsign"]
+        station_call = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else session["callsign"]
         command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "--listen", "telnet", "--addr", f"127.0.0.1:{port}", "http"]
         try:
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
