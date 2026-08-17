@@ -6,7 +6,7 @@ In connect.go, change the exchange call to make AX.25 transports client-initiate
     err = exchange(conn, url.Target, clientInitiated)
 
 In wl2k-go/fbb/handshake.go, accept a secure challenge without a server SID,
-remember `;PQ`, consume the following RMS prompt, and then send `;PR`.
+send only `;PR` when `;PQ` arrives, and consume the already-queued RMS prompt.
 
 The resulting ARM64 binary is pat-winlink-n0jcg. Telnet and non-AX.25
 transports retain Pat's original server-led handshake behavior.
