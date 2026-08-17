@@ -8,13 +8,13 @@ PROFILE_FILE="/var/lib/n0jcg-winlink-webmail/radio-profile.conf"
 
 CALLSIGN="${N0JCG_PACKET_CALLSIGN:-N0JCG-3}"
 AUDIO_DEVICE="${N0JCG_AUDIO_DEVICE:-plughw:1,0}"
-PTT_DEVICE="${N0JCG_PTT_DEVICE:-/dev/digirig-ptt}"
+PTT_DEVICE="${N0JCG_PTT_DEVICE:-/dev/digirig-serial}"
 FREQUENCY="${N0JCG_PACKET_FREQUENCY:-145.070}"
 
 if [[ "${1:-}" != "--noninteractive" ]]; then
     read -r -p "Packet callsign [$CALLSIGN]: " value; CALLSIGN="${value:-$CALLSIGN}"
     read -r -p "DigiRig audio device [$AUDIO_DEVICE]: " value; AUDIO_DEVICE="${value:-$AUDIO_DEVICE}"
-    read -r -p "DigiRig PTT device [$PTT_DEVICE]: " value; PTT_DEVICE="${value:-$PTT_DEVICE}"
+    read -r -p "DigiRig serial/PTT device [$PTT_DEVICE]: " value; PTT_DEVICE="${value:-$PTT_DEVICE}"
     read -r -p "Radio frequency in MHz [$FREQUENCY]: " value; FREQUENCY="${value:-$FREQUENCY}"
 fi
 
@@ -30,7 +30,7 @@ ADEVICE $AUDIO_DEVICE
 CHANNEL 0
 MYCALL $CALLSIGN
 MODEM 1200
-PTT CM108 $PTT_DEVICE
+PTT $PTT_DEVICE RTS
 AGWPORT 8000
 KISSPORT 8001
 EOF
