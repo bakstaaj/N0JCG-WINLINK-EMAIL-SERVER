@@ -48,6 +48,7 @@ PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
 SESSION_IDLE = int(os.environ.get("N0JCG_SESSION_IDLE_SECONDS", "1800"))
 STATE_DIR = Path(os.environ.get("N0JCG_WEBMAIL_STATE_DIR", "/var/lib/n0jcg-winlink-webmail"))
+RADIO_PROFILE_PATH = STATE_DIR / "radio-profile.conf"
 PAT_BASE_CONFIG = os.environ.get("N0JCG_PAT_BASE_CONFIG", "")
 DB_PATH = STATE_DIR / "webmail.sqlite3"
 EMAIL_RE = re.compile(r"^([A-Z0-9][A-Z0-9-]{2,15})@winlink\.org$", re.I)
@@ -269,6 +270,44 @@ def operator_diagnostics():
     }
 
 
+def radio_profile():
+    values = {"N0JCG_PACKET_CALLSIGN": PAT_PACKET_CALLSIGN or "N0JCG-3", "N0JCG_PACKET_FREQUENCY": "145.070", "N0JCG_AUDIO_DEVICE": "plughw:1,0", "N0JCG_PTT_DEVICE": "/dev/digirig-ptt"}
+    try:
+        for line in RADIO_PROFILE_PATH.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                if key in values:
+                    values[key] = value.strip()
+    except OSError:
+        pass
+    return values
+
+
+def apply_radio_profile(data):
+    current = radio_profile()
+    callsign = str(data.get("packet_callsign") or current["N0JCG_PACKET_CALLSIGN"]).strip().upper()
+    frequency = str(data.get("frequency") or current["N0JCG_PACKET_FREQUENCY"]).strip()
+    if not re.fullmatch(r"[A-Z0-9-]{3,15}", callsign):
+        raise ValueError("packet station ID is invalid")
+    if not re.fullmatch(r"[0-9]{2,3}(?:\.[0-9]{1,6})?", frequency):
+        raise ValueError("frequency must be entered in MHz, for example 145.070")
+    RADIO_PROFILE_PATH.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+    profile_lines = [
+        f"N0JCG_PACKET_CALLSIGN={callsign}",
+        f"N0JCG_PACKET_FREQUENCY={frequency}",
+        f"N0JCG_AUDIO_DEVICE={current['N0JCG_AUDIO_DEVICE']}",
+        f"N0JCG_PTT_DEVICE={current['N0JCG_PTT_DEVICE']}",
+        "N0JCG_PACKET_MODE=1200-AFSK",
+        "N0JCG_PAT_CONNECT_URL=ax25+agwpe:///N0JCG-10",
+        "",
+    ]
+    RADIO_PROFILE_PATH.write_text("\n".join(profile_lines), encoding="utf-8")
+    result = subprocess.run(["sudo", "/opt/n0jcg-winlink/tools/apply_radio_profile.sh"], capture_output=True, text=True, timeout=20)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "radio profile could not be applied").strip()[-500:])
+    return radio_profile()
+
+
 def remember_account(email, callsign):
     now = int(time.time())
     with sqlite3.connect(DB_PATH) as db:
@@ -421,6 +460,10 @@ class Handler(BaseHTTPRequestHandler):
                 forms = template_catalog()
                 self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", "updated": True, "count": len(forms.get("templates", [])), **payload})
                 return
+            if self.path == "/api/v1/operator/radio-profile":
+                payload = apply_radio_profile(data)
+                self.send_json(HTTPStatus.OK, {"saved": True, "profile": payload})
+                return
             if self.path == "/api/v1/templates/render":
                 session = session_from(self)
                 if not session:
@@ -550,6 +593,9 @@ class Handler(BaseHTTPRequestHandler):
         session = session_from(self)
         if self.path == "/api/v1/operator/diagnostics":
             self.send_json(HTTPStatus.OK, operator_diagnostics())
+            return
+        if self.path == "/api/v1/operator/radio-profile":
+            self.send_json(HTTPStatus.OK, {"profile": radio_profile()})
             return
         if self.path == "/api/v1/auth/session":
             if not session:

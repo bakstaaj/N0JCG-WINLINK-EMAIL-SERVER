@@ -71,11 +71,14 @@ sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" "$APP_ROOT/tools/n0
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/tools/n0jcg-network-fallback.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools/apply_radio_profile.sh"
 sudo install -m 0644 "$REPO_ROOT/config/direwolf-n0jcg.conf.example" "$APP_ROOT/config/direwolf-n0jcg.conf.example"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-direwolf.service" "$APP_ROOT/tools/n0jcg-direwolf.service"
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-direwolf.service" | sudo tee /etc/systemd/system/n0jcg-direwolf.service >/dev/null
+printf '%s ALL=(root) NOPASSWD: %s/tools/apply_radio_profile.sh\n' "$APP_USER" "$APP_ROOT" | sudo tee /etc/sudoers.d/n0jcg-radio-profile >/dev/null
+sudo chmod 0440 /etc/sudoers.d/n0jcg-radio-profile
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"
 sudo rm -f /etc/nginx/sites-enabled/default
 if [[ ! -f /etc/nginx/snippets/n0jcg-winlink-auth.conf.optional ]]; then
