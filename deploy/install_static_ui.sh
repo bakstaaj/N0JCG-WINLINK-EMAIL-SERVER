@@ -75,6 +75,7 @@ sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/too
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools/apply_radio_profile.sh"
 sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tools/agwpe_identity_bridge.py"
+sudo install -m 0755 "$REPO_ROOT/tools/pat-winlink-n0jcg" "$APP_ROOT/tools/pat-winlink-n0jcg"
 sudo install -m 0644 "$REPO_ROOT/config/direwolf-n0jcg.conf.example" "$APP_ROOT/config/direwolf-n0jcg.conf.example"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"

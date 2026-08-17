@@ -41,7 +41,7 @@ except ModuleNotFoundError:  # direct import by the repository test loader
 
 HOST = os.environ.get("N0JCG_WEBMAIL_HOST", "127.0.0.1")
 PORT = int(os.environ.get("N0JCG_WEBMAIL_PORT", "8097"))
-PAT_BIN = os.environ.get("N0JCG_PAT_BIN", "pat-winlink")
+PAT_BIN = os.environ.get("N0JCG_PAT_BIN", "/opt/n0jcg-winlink/tools/pat-winlink-n0jcg")
 PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "45"))
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")

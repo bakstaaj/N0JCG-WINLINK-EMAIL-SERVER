@@ -1,0 +1,9 @@
+Pat v0.16.0 packet-client handshake adjustment
+
+In connect.go, change the exchange call to make AX.25 transports client-initiated:
+
+    clientInitiated := strings.HasPrefix(url.Scheme, MethodAX25)
+    err = exchange(conn, url.Target, clientInitiated)
+
+The resulting ARM64 binary is pat-winlink-n0jcg. Telnet and non-AX.25
+transports retain Pat's original server-led handshake behavior.
