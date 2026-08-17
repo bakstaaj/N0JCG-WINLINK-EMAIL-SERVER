@@ -1,0 +1,18 @@
+[Unit]
+Description=N0JCG Winlink Email Server 1200-baud AFSK packet modem
+After=sound.target n0jcg-usb-gadget.service
+Wants=sound.target
+ConditionPathExists=/etc/n0jcg-winlink/direwolf.conf
+
+[Service]
+Type=simple
+User=@APP_USER@
+Group=@APP_USER@
+SupplementaryGroups=audio input
+ExecStart=/usr/bin/direwolf -c /etc/n0jcg-winlink/direwolf.conf -t 0
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

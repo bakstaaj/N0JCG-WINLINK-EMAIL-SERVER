@@ -1,0 +1,10 @@
+# N0JCG Winlink Email Server - Retevis RT95 / DigiRig Mobile
+# 1200-baud AFSK packet profile. The radio must be tuned to the selected
+# frequency separately; Dire Wolf supplies the packet modem.
+ADEVICE plughw:1,0
+CHANNEL 0
+MYCALL N0JCG-3
+MODEM 1200
+PTT CM108 /dev/digirig-ptt
+AGWPORT 8000
+KISSPORT 8001
