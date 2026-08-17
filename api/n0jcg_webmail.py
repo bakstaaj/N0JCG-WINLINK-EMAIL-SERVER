@@ -45,6 +45,7 @@ PAT_BIN = os.environ.get("N0JCG_PAT_BIN", "pat-winlink")
 PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "45"))
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
+PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
 SESSION_IDLE = int(os.environ.get("N0JCG_SESSION_IDLE_SECONDS", "1800"))
 STATE_DIR = Path(os.environ.get("N0JCG_WEBMAIL_STATE_DIR", "/var/lib/n0jcg-winlink-webmail"))
 PAT_BASE_CONFIG = os.environ.get("N0JCG_PAT_BASE_CONFIG", "")
@@ -119,7 +120,7 @@ def write_pat_config(callsign, password, destination):
         raise RuntimeError("Pat configuration is not a JSON object")
     if "telnet" not in config:
         raise RuntimeError("Pat telnet profile is missing; run Pat configuration once before using webmail")
-    config["mycall"] = callsign
+    config["mycall"] = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
     config["secure_login_password"] = password
     with destination.open("w", encoding="utf-8") as handle:
         json.dump(config, handle)
@@ -154,15 +155,16 @@ def pat_validate(callsign, password):
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
         connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
-        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", connect_url]
+        station_call = PAT_PACKET_CALLSIGN if connect_url.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
+        command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "connect", connect_url]
         try:
-            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": station_call, "PAT_SECURE_LOGIN_PASSWORD": password})
         except FileNotFoundError:
             alternate = shutil.which("pat")
             if not alternate:
                 return False, "Pat client is not installed on the appliance."
             command[0] = alternate
-            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": station_call, "PAT_SECURE_LOGIN_PASSWORD": password})
         output = result.stdout[-12000:]
         if FAILURE_RE.search(output):
             return False, "Winlink rejected the secure-login credentials."
@@ -194,7 +196,8 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        command = [PAT_BIN, "--config", str(config), "--mycall", session["callsign"], "--mbox", str(mailbox_dir), "--listen", "telnet", "--addr", f"127.0.0.1:{port}", "http"]
+        station_call = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else session["callsign"]
+        command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "--listen", "telnet", "--addr", f"127.0.0.1:{port}", "http"]
         try:
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         except FileNotFoundError:
