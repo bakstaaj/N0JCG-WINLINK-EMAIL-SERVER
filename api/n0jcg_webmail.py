@@ -413,7 +413,8 @@ class Handler(BaseHTTPRequestHandler):
                 except (RuntimeError, OSError) as exc:
                     self.send_json(HTTPStatus.BAD_GATEWAY, {"error": str(exc), "source": "winlink_standard_forms"})
                     return
-                self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", "updated": True, **payload})
+                forms = template_catalog()
+                self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", "updated": True, "count": len(forms.get("templates", [])), **payload})
                 return
             if self.path == "/api/v1/templates/render":
                 session = session_from(self)

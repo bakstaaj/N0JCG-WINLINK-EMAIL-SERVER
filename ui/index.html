@@ -42,6 +42,14 @@
     const diagnosticList = document.getElementById('diagnostic-list');
     const diagnosticObserved = document.getElementById('diagnostic-observed');
     const present = (value) => value ? 'present' : 'not detected';
+    function updateFormsCard(forms) {
+      const details = forms || {};
+      const formsStatus = document.getElementById('forms-status');
+      formsStatus.textContent = details.available ? 'Installed' : 'Not installed';
+      formsStatus.className = details.available ? 'status status-ready' : 'status status-unavailable';
+      document.getElementById('forms-version').textContent = details.version || 'Not installed';
+      document.getElementById('forms-count').textContent = String(details.count || 0);
+    }
     async function refreshDiagnostics() {
       diagnosticStatus.textContent = 'Checking…';
       try {
@@ -51,11 +59,7 @@
       const devices = data.devices || {};
       const services = data.services || {};
       const forms = data.standard_forms || {};
-      const formsStatus = document.getElementById('forms-status');
-      formsStatus.textContent = forms.available ? 'Installed' : 'Not installed';
-      formsStatus.className = forms.available ? 'status status-ready' : 'status status-unavailable';
-      document.getElementById('forms-version').textContent = forms.version || 'Not installed';
-      document.getElementById('forms-count').textContent = String(forms.count || 0);
+      updateFormsCard(forms);
       diagnosticList.innerHTML = `<li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Audio: ${present(devices.audio && devices.audio.present)}; serial: ${present(devices.serial && devices.serial.present)}; PTT: ${present(devices.ptt && devices.ptt.present)}.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf binary: ${data.binaries && data.binaries.direwolf ? 'installed' : 'not installed'}; service: ${services.direwolf || 'unknown'}.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Winlink client binary: ${data.binaries && data.binaries.pat ? 'installed' : 'not installed'}; Webmail: ${services.webmail || 'unknown'}.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Not verified; radio is not connected and transmit policy remains ${data.transmit_policy || 'DISABLED'}.</small></span></li>`;
       diagnosticStatus.textContent = 'Live evidence';
       diagnosticStatus.className = 'status status-detected';
@@ -73,6 +77,7 @@
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Standard Forms update failed.');
         message.textContent = `Updated to version ${data.version}. Webmail users can now open Templates.`;
+        updateFormsCard({ available: true, version: data.version, count: data.count });
         await refreshDiagnostics();
       } catch (error) { message.textContent = error.message; }
       finally { button.disabled = false; }
