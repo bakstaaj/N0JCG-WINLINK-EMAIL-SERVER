@@ -410,7 +410,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/v1/operator/templates/update":
                 try:
                     payload = update_template_library()
-                except RuntimeError as exc:
+                except (RuntimeError, OSError) as exc:
                     self.send_json(HTTPStatus.BAD_GATEWAY, {"error": str(exc), "source": "winlink_standard_forms"})
                     return
                 self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", "updated": True, **payload})

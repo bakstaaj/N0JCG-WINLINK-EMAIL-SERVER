@@ -83,6 +83,12 @@ def update_library(url=STANDARD_FORMS_URL, root=TEMPLATES_ROOT):
         for file_path in destination.rglob("*"):
             os.chmod(file_path, 0o755 if file_path.is_dir() else 0o644)
         os.chmod(root / "standard" / "current.json", 0o644)
+        owner = os.environ.get("N0JCG_TEMPLATES_OWNER") or os.environ.get("SUDO_USER")
+        if owner and os.geteuid() == 0:
+            import pwd
+            account = pwd.getpwnam(owner)
+            for path in (root, root / "standard", destination, root / "standard" / "current.json", *destination.rglob("*")):
+                os.chown(path, account.pw_uid, account.pw_gid)
         return metadata
 
 
