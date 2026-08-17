@@ -37,6 +37,8 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
     test -f "$REPO_ROOT/deploy/configure_packet_radio.sh"
+    test -f "$REPO_ROOT/tools/agwpe_identity_bridge.py"
+    test -f "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service"
     test -f "$REPO_ROOT/branding/tokens.css"
     test -f "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg"
     echo "PASS: static UI source and brand assets are present"
@@ -72,10 +74,13 @@ sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/to
 sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools/apply_radio_profile.sh"
+sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tools/agwpe_identity_bridge.py"
 sudo install -m 0644 "$REPO_ROOT/config/direwolf-n0jcg.conf.example" "$APP_ROOT/config/direwolf-n0jcg.conf.example"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-direwolf.service" "$APP_ROOT/tools/n0jcg-direwolf.service"
+sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" "$APP_ROOT/tools/n0jcg-agwpe-identity-bridge.service"
+sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" | sudo tee /etc/systemd/system/n0jcg-agwpe-identity-bridge.service >/dev/null
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-direwolf.service" | sudo tee /etc/systemd/system/n0jcg-direwolf.service >/dev/null
 printf '%s ALL=(root) NOPASSWD: %s/tools/apply_radio_profile.sh\n' "$APP_USER" "$APP_ROOT" | sudo tee /etc/sudoers.d/n0jcg-radio-profile >/dev/null
 sudo chmod 0440 /etc/sudoers.d/n0jcg-radio-profile
@@ -90,6 +95,9 @@ sudo systemctl reload nginx
 sudo systemctl daemon-reload
 sudo systemctl enable n0jcg-webmail.service
 sudo systemctl restart n0jcg-webmail.service
+sudo systemctl daemon-reload
+sudo systemctl enable n0jcg-agwpe-identity-bridge.service
+sudo systemctl restart n0jcg-agwpe-identity-bridge.service
 if ! grep -q 'PAT_TELNET_URL' "$APP_ROOT/api/n0jcg_webmail.py"; then
     echo "FAIL: installed webmail API is missing the current Pat authentication revision" >&2
     exit 1

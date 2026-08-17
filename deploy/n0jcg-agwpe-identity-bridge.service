@@ -1,0 +1,20 @@
+[Unit]
+Description=N0JCG Winlink AGWPE packet identity bridge
+After=n0jcg-direwolf.service
+Wants=n0jcg-direwolf.service
+
+[Service]
+Type=simple
+User=@APP_USER@
+Group=@APP_USER@
+EnvironmentFile=-/var/lib/n0jcg-winlink-webmail/radio-profile.conf
+ExecStart=/usr/bin/python3 /opt/n0jcg-winlink/tools/agwpe_identity_bridge.py --listen-host 127.0.0.1 --listen-port 8002 --upstream-host 127.0.0.1 --upstream-port 8000 --packet-call ${N0JCG_PACKET_CALLSIGN}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

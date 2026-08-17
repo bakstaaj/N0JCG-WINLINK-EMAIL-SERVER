@@ -46,6 +46,7 @@ PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "45"))
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
+PAT_AGWPE_ADDR = os.environ.get("N0JCG_PAT_AGWPE_ADDR", "localhost:8002")
 SESSION_IDLE = int(os.environ.get("N0JCG_SESSION_IDLE_SECONDS", "1800"))
 STATE_DIR = Path(os.environ.get("N0JCG_WEBMAIL_STATE_DIR", "/var/lib/n0jcg-winlink-webmail"))
 RADIO_PROFILE_PATH = STATE_DIR / "radio-profile.conf"
@@ -121,22 +122,16 @@ def write_pat_config(callsign, password, destination):
         raise RuntimeError("Pat configuration is not a JSON object")
     if "telnet" not in config:
         raise RuntimeError("Pat telnet profile is missing; run Pat configuration once before using webmail")
+    config.setdefault("agwpe", {})["addr"] = PAT_AGWPE_ADDR
     # Keep the RF AX.25 source identity separate from the logged-in Winlink
     # mailbox. Pat supports auxiliary callsigns as CALLSIGN:PASSWORD entries.
     # This lets the packet station use its configured SSID while secure login
     # is still performed for the mailbox call entered by the user.
-    packet_call = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
-    config["mycall"] = packet_call
-    if packet_call.upper() != callsign.upper():
-        auxiliary = config.get("auxiliary_addresses")
-        if not isinstance(auxiliary, list):
-            auxiliary = []
-        auxiliary = [
-            entry for entry in auxiliary
-            if not (isinstance(entry, str) and entry.split(":", 1)[0].upper() == callsign.upper())
-        ]
-        auxiliary.append(f"{callsign}:{password}")
-        config["auxiliary_addresses"] = auxiliary
+    # The local AGWPE bridge rewrites Pat's mailbox call to the packet station
+    # call before Dire Wolf sees it. Pat therefore keeps the logged-in call as
+    # its own primary Winlink/FBB identity.
+    config["mycall"] = callsign
+    config["auxiliary_addresses"] = []
     config["secure_login_password"] = password
     with destination.open("w", encoding="utf-8") as handle:
         json.dump(config, handle)
@@ -171,7 +166,7 @@ def pat_validate(callsign, password):
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
         connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
-        station_call = PAT_PACKET_CALLSIGN if connect_url.startswith("ax25") and PAT_PACKET_CALLSIGN else callsign
+        station_call = callsign
         command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "connect", connect_url]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": station_call, "PAT_SECURE_LOGIN_PASSWORD": password})
@@ -212,7 +207,7 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        station_call = PAT_PACKET_CALLSIGN if PAT_CONNECT_URL.startswith("ax25") and PAT_PACKET_CALLSIGN else session["callsign"]
+        station_call = session["callsign"]
         command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "--listen", "telnet", "--addr", f"127.0.0.1:{port}", "http"]
         try:
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
