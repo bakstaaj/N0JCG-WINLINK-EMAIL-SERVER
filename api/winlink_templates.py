@@ -76,6 +76,13 @@ def update_library(url=STANDARD_FORMS_URL, root=TEMPLATES_ROOT):
         shutil.copytree(source, destination)
         metadata = {"version": version, "updated_at": _datetime.datetime.now(_datetime.timezone.utc).isoformat(), "source": url}
         (root / "standard" / "current.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        # The updater is normally invoked with sudo, while the webmail service
+        # runs as the unprivileged appliance user. Keep the library readable.
+        for directory in (root, root / "standard", destination):
+            os.chmod(directory, 0o755)
+        for file_path in destination.rglob("*"):
+            os.chmod(file_path, 0o755 if file_path.is_dir() else 0o644)
+        os.chmod(root / "standard" / "current.json", 0o644)
         return metadata
 
 
@@ -113,12 +120,15 @@ def _descriptor_payload(path, version, library_root):
 
 def catalog(root=TEMPLATES_ROOT):
     current = root / "standard" / "current.json"
-    if not current.is_file():
-        return {"available": False, "templates": []}
-    metadata = json.loads(current.read_text(encoding="utf-8"))
-    library = root / "standard" / metadata["version"]
-    templates = [_descriptor_payload(path, metadata["version"], library) for path in sorted(library.rglob("*.txt")) if path.name.lower() not in {"changelog.txt", "standard_forms_version.dat"}]
-    return {**metadata, "available": True, "templates": templates}
+    try:
+        if not current.is_file():
+            return {"available": False, "templates": []}
+        metadata = json.loads(current.read_text(encoding="utf-8"))
+        library = root / "standard" / metadata["version"]
+        templates = [_descriptor_payload(path, metadata["version"], library) for path in sorted(library.rglob("*.txt")) if path.name.lower() not in {"changelog.txt", "standard_forms_version.dat"}]
+        return {**metadata, "available": True, "templates": templates}
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {"available": False, "templates": [], "error": f"Standard Forms library is not readable: {exc}"}
 
 
 def render(template_id, values, callsign, root=TEMPLATES_ROOT):
