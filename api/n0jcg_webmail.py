@@ -44,6 +44,7 @@ PORT = int(os.environ.get("N0JCG_WEBMAIL_PORT", "8097"))
 PAT_BIN = os.environ.get("N0JCG_PAT_BIN", "pat-winlink")
 PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "45"))
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
+PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 SESSION_IDLE = int(os.environ.get("N0JCG_SESSION_IDLE_SECONDS", "1800"))
 STATE_DIR = Path(os.environ.get("N0JCG_WEBMAIL_STATE_DIR", "/var/lib/n0jcg-winlink-webmail"))
 PAT_BASE_CONFIG = os.environ.get("N0JCG_PAT_BASE_CONFIG", "")
@@ -152,8 +153,8 @@ def pat_validate(callsign, password):
         # Use the canonical CMS URL directly. A locally customized `telnet`
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
-        telnet_url = PAT_TELNET_URL.replace("{mycall}", callsign)
-        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", telnet_url]
+        connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
+        command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", connect_url]
         try:
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=PAT_TIMEOUT, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
         except FileNotFoundError:
@@ -169,7 +170,8 @@ def pat_validate(callsign, password):
             return False, pat_failure_detail(output, result.returncode, password)
         if not SUCCESS_RE.search(output):
             return False, "Pat returned no recognizable Winlink authentication evidence."
-        return True, "Winlink CMS authentication succeeded; isolated Pat mailbox initialized."
+        transport = "Packet RMS" if connect_url.startswith("ax25") else "Winlink CMS"
+        return True, f"{transport} authentication succeeded; isolated Pat mailbox initialized."
     except subprocess.TimeoutExpired:
         return False, "Winlink authentication timed out."
     except RuntimeError as exc:
