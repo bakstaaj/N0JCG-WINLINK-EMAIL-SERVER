@@ -22,5 +22,4 @@ KISSPORT 8001
 EOF
 install -m 0644 "$PROFILE" /etc/n0jcg-winlink/radio-profile.conf
 systemctl restart n0jcg-direwolf.service
-systemctl restart n0jcg-webmail.service
 echo "PASS: packet station profile applied for ${N0JCG_PACKET_CALLSIGN}"

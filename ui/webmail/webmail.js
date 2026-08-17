@@ -12,13 +12,58 @@
   const workspace = document.getElementById('mail-workspace');
   const mailUser = document.getElementById('mail-user');
   const logoutButton = document.getElementById('logout-button');
+  const syncStatus = document.getElementById('mail-sync-status');
+  const mailboxBadge = document.querySelector('.status-badge');
   let sessionTimer;
+  let syncTimer;
+  let queueTimer;
+  let autoSyncTimer;
+  let currentCallsign = '';
   const emptyCopy = {
     inbox: ['No mailbox connection', 'The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
     sent: ['No sent messages', 'Sent message history will appear here after the Winlink mailbox is connected.'],
     drafts: ['No drafts', 'Drafts are stored locally only until the mailbox API is connected.'],
     queue: ['Send queue is empty', 'Messages queued for Packet transmission will appear here with delivery state and retry evidence.']
   };
+
+  async function pollMailboxSync() {
+    if (!syncStatus || authGate.hidden === false) return;
+    try {
+      const response = await fetch('/api/v1/mail/sync', { cache: 'no-store' });
+      if (!response.ok) return;
+      const body = await response.json();
+      const active = ['CONNECTING', 'AUTHENTICATING'].includes(body.state)
+        || ['cms_connected', 'authenticating', 'downloading', 'uploading'].includes(body.stage)
+        || (body.state === 'AUTHENTICATED' && !['complete', 'no_messages', 'failed'].includes(body.stage));
+      if (body.state === 'ERROR') {
+        window.clearTimeout(syncTimer);
+        workspace.hidden = true;
+        authGate.hidden = false;
+        authMessage(document.getElementById('login-form'), body.message || 'Winlink authentication failed.');
+        return;
+      }
+      if (mailboxBadge && currentCallsign) {
+        mailboxBadge.className = `status-badge ${body.state === 'AUTHENTICATED' ? 'status-ready' : 'status-unknown'}`;
+        const pendingLabel = body.stage === 'complete' ? 'downloaded' : 'downloading';
+        const pending = Number.isInteger(body.pending_count) ? ` · ${body.pending_count} message${body.pending_count === 1 ? '' : 's'} ${pendingLabel}` : (body.outgoing_count ? ` · ${body.outgoing_count} message${body.outgoing_count === 1 ? '' : 's'} ${body.stage === 'complete' ? 'sent' : 'sending'}` : '');
+        mailboxBadge.textContent = `${body.state === 'AUTHENTICATED' ? '✓ Mailbox: Connected' : '… Mailbox: Connecting'} - ${currentCallsign}${pending}`;
+      }
+      syncStatus.hidden = !active;
+      syncStatus.textContent = active ? (body.message || 'Synchronizing the Winlink mailbox…') : (body.message || '');
+      if (active) {
+        window.clearTimeout(syncTimer);
+        syncTimer = window.setTimeout(pollMailboxSync, 2500);
+      }
+      if (active && document.querySelector('[data-folder="inbox"].active')) loadMessages('inbox');
+      if (!active && body.stage === 'complete' && document.querySelector('[data-folder="inbox"].active')) {
+        loadMessages('inbox');
+      }
+      if (!active && body.stage === 'complete') {
+        if (document.querySelector('[data-folder="queue"].active')) loadMessages('queue');
+        refreshNavCounts();
+      }
+    } catch (_) { /* mailbox status is advisory */ }
+  }
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -31,6 +76,66 @@
       counter.textContent = String(count);
       counter.setAttribute('aria-label', `${count} ${folder === 'drafts' ? 'drafts' : folder === 'queue' ? 'queued messages' : 'messages'}`);
     }
+  }
+
+  function installBulkActions(folder) {
+    const selected = () => [...folderView.querySelectorAll('.message-select:checked')];
+    folderView.querySelector('[data-bulk-read]')?.addEventListener('click', async () => {
+      const items = selected();
+      if (!items.length) return window.alert('Select at least one message.');
+      await Promise.all(items.map((item) => fetch(`/api/v1/mail/messages/${encodeURIComponent(item.dataset.messageId)}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder }) })));
+      await loadMessages(folder);
+    });
+    folderView.querySelector('[data-bulk-delete]')?.addEventListener('click', async () => {
+      const items = selected();
+      if (!items.length) return window.alert('Select at least one message.');
+      if (!window.confirm(`Delete ${items.length} selected message${items.length === 1 ? '' : 's'}?`)) return;
+      await Promise.all(items.map((item) => fetch(`/api/v1/mail/messages/${encodeURIComponent(item.dataset.messageId)}?folder=${encodeURIComponent(folder)}`, { method: 'DELETE' })));
+      await loadMessages(folder);
+      if (folder.startsWith('custom:')) await loadFolders();
+    });
+    folderView.querySelectorAll('.message-select').forEach((checkbox) => checkbox.addEventListener('click', (event) => event.stopPropagation()));
+  }
+
+  function bulkBar() {
+    return '<div class="bulk-actions" role="toolbar" aria-label="Bulk message actions"><button type="button" data-bulk-read>Mark selected read</button><button type="button" data-bulk-delete>Delete selected</button></div>';
+  }
+
+  async function refreshNavCounts() {
+    const [draftResponse, queueResponse] = await Promise.all([
+      fetch('/api/v1/mail/drafts', { cache: 'no-store' }),
+      fetch('/api/v1/mail/queue', { cache: 'no-store' })
+    ]);
+    if (draftResponse.ok) setFolderCount('drafts', ((await draftResponse.json()).drafts || []).length);
+    if (queueResponse.ok) setFolderCount('queue', ((await queueResponse.json()).queue || []).length);
+  }
+
+  async function pollQueueUntilSettled() {
+    try {
+      const response = await fetch('/api/v1/mail/queue', { cache: 'no-store' });
+      if (!response.ok) return;
+      const queue = (await response.json()).queue || [];
+      setFolderCount('queue', queue.length);
+      if (queue.some((item) => item.state === 'STAGED')) {
+        window.clearTimeout(queueTimer);
+        queueTimer = window.setTimeout(pollQueueUntilSettled, 2500);
+      } else if (document.querySelector('[data-folder="queue"].active')) {
+        await loadMessages('queue');
+      }
+    } catch (_) { /* queue status is advisory */ }
+  }
+
+  async function scheduleAutomaticSync() {
+    window.clearTimeout(autoSyncTimer);
+    try {
+      const response = await fetch('/api/v1/mail/settings', { cache: 'no-store' });
+      if (!response.ok) return;
+      const minutes = Number((await response.json()).auto_sync_minutes);
+      if (!Number.isFinite(minutes) || minutes < 5) return;
+      autoSyncTimer = window.setTimeout(async () => {
+        try { await fetch('/api/v1/mail/sync', { method: 'POST' }); } finally { pollMailboxSync(); scheduleAutomaticSync(); }
+      }, minutes * 60 * 1000);
+    } catch (_) { /* operator setting is advisory */ }
   }
 
   function showFolder(folder) {
@@ -55,7 +160,10 @@
         if (!response.ok) throw new Error(body.error || 'Folder messages are unavailable.');
         const messages = body.messages || [];
         folderTitle.textContent = `Custom folder ${messages.length}`;
-        folderView.innerHTML = messages.length ? `<div class="message-list">${messages.map((message) => `<button class="message-row" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="in"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : '<strong>Folder is empty</strong><p>Drag a message here from Inbox to organize it.</p>';
+        folderView.innerHTML = messages.length ? `${bulkBar()}<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="${escapeHtml(message.box || 'in')}"><input class="message-select" type="checkbox" data-message-id="${escapeHtml(message.MID)}" aria-label="Select message"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : '<strong>Folder is empty</strong><p>Drag a message here from Inbox to organize it.</p>';
+        if (messages.length) installBulkActions(folder);
+        folderView.querySelectorAll('button[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
+        folderView.querySelectorAll('[draggable="true"]').forEach((button) => button.addEventListener('dragstart', (event) => event.dataTransfer.setData('application/x-n0jcg-message', JSON.stringify({ mid: button.dataset.messageId, box: button.dataset.messageBox, sourceFolder: folder }))));
         return;
       } catch (error) { folderView.innerHTML = `<strong>Folder unavailable</strong><p>${escapeHtml(error.message)}</p>`; return; }
     }
@@ -87,6 +195,10 @@
         if (!response.ok) throw new Error(body.error || 'Send queue is unavailable.');
         const queue = body.queue || [];
         setFolderCount('queue', queue.length);
+        if (queue.some((item) => item.state === 'STAGED')) {
+          window.clearTimeout(queueTimer);
+          queueTimer = window.setTimeout(pollQueueUntilSettled, 2500);
+        }
         folderView.innerHTML = queue.length ? `<div class="message-list">${queue.map((item) => `<div class="message-row queue-row"><div class="queue-summary"><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.recipient)}</span><time>${escapeHtml(item.state)}</time></div>${item.state === 'QUEUED' ? `<button class="queue-cancel" type="button" data-cancel-queue="${escapeHtml(item.id)}">Cancel</button>` : ''}</div>`).join('')}</div>` : '<strong>Send queue is empty</strong><p>No messages are waiting for a verified Pat/Packet transmission path.</p>';
         folderTitle.textContent = `Send queue ${queue.length}`;
         folderView.querySelectorAll('[data-cancel-queue]').forEach((button) => button.addEventListener('click', async () => {
@@ -103,16 +215,27 @@
       const response = await fetch(`/api/v1/mail/messages?folder=${encodeURIComponent(folder)}`, { cache: 'no-store' });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Mailbox is unavailable.');
+      if (body.state === 'SYNCING') {
+        folderTitle.textContent = 'Inbox';
+        folderView.innerHTML = '<strong>Mailbox synchronization in progress</strong><p>Your Winlink login is active. Messages will appear as the Packet RMS transfer completes.</p>';
+        return;
+      }
+      if (body.state === 'NO_MESSAGES') {
+        folderTitle.textContent = 'Inbox';
+        folderView.innerHTML = '<strong>No downloadable messages reported by the RMS</strong><p>The mailbox was authenticated, but this exchange returned no message proposals. Select Refresh to start another synchronization.</p>';
+        return;
+      }
       const messages = body.messages || [];
       const count = messages.length;
       const unread = messages.filter((message) => message.Unread).length;
       setFolderCount(folder, folder === 'inbox' ? unread : count);
       const title = folder === 'inbox' ? `Inbox ${unread} unread / ${count} total` : `${folder.charAt(0).toUpperCase() + folder.slice(1)} ${count}`;
       const box = folder === 'inbox' ? 'in' : folder === 'sent' ? 'sent' : 'out';
-      folderView.innerHTML = count ? `<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="${box}"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
+      folderView.innerHTML = count ? `${bulkBar()}<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="${box}"><input class="message-select" type="checkbox" data-message-id="${escapeHtml(message.MID)}" aria-label="Select message"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
+      if (count) installBulkActions(folder);
       folderTitle.textContent = title;
-      folderView.querySelectorAll('[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
-      folderView.querySelectorAll('[draggable="true"]').forEach((button) => button.addEventListener('dragstart', (event) => event.dataTransfer.setData('application/x-n0jcg-message', JSON.stringify({ mid: button.dataset.messageId, box: button.dataset.messageBox }))));
+      folderView.querySelectorAll('button[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
+      folderView.querySelectorAll('[draggable="true"]').forEach((button) => button.addEventListener('dragstart', (event) => event.dataTransfer.setData('application/x-n0jcg-message', JSON.stringify({ mid: button.dataset.messageId, box: button.dataset.messageBox, sourceFolder: folder }))));
     } catch (error) {
       folderView.innerHTML = `<strong>Mailbox unavailable</strong><p>${error.message}</p>`;
     }
@@ -150,12 +273,17 @@
         if (!response.ok) { window.alert('The message could not be deleted.'); return; }
         showFolder(folder);
       });
-      await fetch(`/api/v1/mail/messages/${encodeURIComponent(mid)}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder }) });
+      const readResponse = await fetch(`/api/v1/mail/messages/${encodeURIComponent(mid)}/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder }) });
+      if (!readResponse.ok) {
+        const readBody = await readResponse.json().catch(() => ({}));
+        throw new Error(readBody.error || 'The message could not be marked as read.');
+      }
       if (folder === 'inbox' && message.Unread) {
         const counter = document.querySelector('[data-folder="inbox"] .folder-count');
         const current = counter ? Number.parseInt(counter.textContent, 10) || 0 : 0;
         setFolderCount('inbox', Math.max(0, current - 1));
       }
+      message.Unread = false;
     } catch (error) {
       folderView.innerHTML = `<strong>Message unavailable</strong><p>${error.message}</p>`;
     }
@@ -167,7 +295,7 @@
     signatureView.hidden = true;
     folderManager.hidden = true;
     templateView.hidden = true;
-    folderTitle.textContent = 'New message';
+    folderTitle.textContent = 'Compose';
     composeView.removeAttribute('data-draft-id');
     composeView.querySelector('input[name="to"]').value = '';
     composeView.querySelector('input[name="subject"]').value = '';
@@ -193,6 +321,7 @@
     if (!response.ok) throw new Error(body.error || 'Draft could not be saved.');
     window.alert('Draft saved locally.');
     await loadMessages('drafts');
+    await refreshNavCounts();
   }
 
   function validateAttachment() {
@@ -278,8 +407,15 @@
       content.querySelectorAll('[data-template-field]').forEach((input) => { values[input.dataset.templateField] = input.value; });
       const message = document.getElementById('template-message');
       try {
-        const response = await fetch('/api/v1/templates/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: template.id, values }) });
+        const response = await fetch('/api/v1/templates/render', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: template.id, values }) });
         const body = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          window.clearTimeout(sessionTimer);
+          workspace.hidden = true;
+          authGate.hidden = false;
+          authMessage(document.getElementById('login-form'), 'Your Webmail session has expired. Please sign in again.');
+          return;
+        }
         if (!response.ok) throw new Error(body.error || 'Template could not be rendered.');
         showCompose();
         form.querySelector('input[name="to"]').value = body.recipient || '';
@@ -352,6 +488,7 @@
       document.getElementById('login-form').reset();
       logoutButton.disabled = false;
       if (sessionTimer) window.clearTimeout(sessionTimer);
+      window.clearTimeout(autoSyncTimer);
     }
   }
 
@@ -376,11 +513,15 @@
       if (!response.ok) throw new Error(body.error || 'Mailbox validation is unavailable.');
       authGate.hidden = true;
       workspace.hidden = false;
+      currentCallsign = body.callsign;
       showSignedInUser(body.callsign);
       scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
-      document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
+      mailboxBadge.className = 'status-badge status-unknown';
+      mailboxBadge.textContent = `… Mailbox: Connecting - ${body.callsign}`;
       refreshFolderCounts();
+      pollMailboxSync();
+      scheduleAutomaticSync();
     } catch (error) {
       authMessage(formElement, error.message + ' No mailbox data was opened.');
     } finally {
@@ -395,11 +536,15 @@
       if (!response.ok || !body.authenticated) return;
       authGate.hidden = true;
       workspace.hidden = false;
+      currentCallsign = body.callsign;
       showSignedInUser(body.callsign);
       scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
-      document.querySelector('.status-badge').textContent = `Mailbox: Connected - ${body.callsign}`;
+      mailboxBadge.className = 'status-badge status-unknown';
+      mailboxBadge.textContent = `… Mailbox: Connecting - ${body.callsign}`;
       refreshFolderCounts();
+      pollMailboxSync();
+      scheduleAutomaticSync();
     } catch (_) {
       // The login form remains available when the session endpoint is offline.
     }
@@ -451,7 +596,24 @@
   document.querySelector('[data-action="signature"]').addEventListener('click', showSignature);
   document.querySelector('[data-action="cancel-compose"]').addEventListener('click', () => showFolder('inbox'));
   document.querySelector('[data-action="cancel-signature"]').addEventListener('click', () => showFolder('inbox'));
-  document.querySelector('[data-action="refresh"]').addEventListener('click', () => showFolder('inbox'));
+  document.querySelector('[data-action="refresh"]').addEventListener('click', async () => {
+    const button = document.querySelector('[data-action="refresh"]');
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/v1/mail/sync', { method: 'POST' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Mailbox synchronization could not be started.');
+      syncStatus.hidden = false;
+      syncStatus.textContent = 'Starting a new Packet RMS synchronization…';
+      await showFolder('inbox');
+      pollMailboxSync();
+    } catch (error) {
+      syncStatus.hidden = false;
+      syncStatus.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
   document.querySelector('[data-action="save-draft"]').addEventListener('click', async () => {
     try { await saveDraft(); } catch (error) { window.alert(error.message); }
   });
@@ -462,12 +624,16 @@
     try {
       const data = Object.fromEntries(new FormData(form));
       const attachment = await readAttachment();
-      const response = await fetch('/api/v1/mail/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body, attachment }) });
+      const response = await fetch('/api/v1/mail/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: data.to, subject: data.subject, body: data.body, attachment, draft_id: composeView.dataset.draftId || undefined }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Message could not be queued.');
-      window.alert('Message queued locally. Transmission remains disabled until the Winlink/Packet path is verified.');
+      window.alert(body.sync_error ? `Message queued locally. Send could not start yet: ${body.sync_error}` : 'Message queued. Packet RMS synchronization has started.');
       composeView.removeAttribute('data-draft-id');
       showFolder('queue');
+      await loadMessages('queue');
+      await refreshNavCounts();
+      pollQueueUntilSettled();
+      pollMailboxSync();
     } catch (error) { window.alert(error.message); }
   });
   signatureForm.addEventListener('submit', async (event) => {

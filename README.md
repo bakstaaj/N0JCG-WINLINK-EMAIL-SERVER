@@ -1,5 +1,7 @@
 # N0JCG Winlink Email Server
 
+Current release: v0.1.1
+
 N0JCG Winlink Email Server is a Raspberry Pi client-side appliance for sending and receiving Winlink email through a Packet RMS gateway. It uses a DigiRig Mobile, a connected radio, Dire Wolf, and Pat.
 
 The repository and host use compatibility identifiers such as `N0JCG-WINLINK-EMAIL-SERVER` and `PI-WINLINK`. The visible product identity is **N0JCG Winlink Email Server**.

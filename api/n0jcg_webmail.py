@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -41,8 +42,14 @@ except ModuleNotFoundError:  # direct import by the repository test loader
 
 HOST = os.environ.get("N0JCG_WEBMAIL_HOST", "127.0.0.1")
 PORT = int(os.environ.get("N0JCG_WEBMAIL_PORT", "8097"))
-PAT_BIN = os.environ.get("N0JCG_PAT_BIN", "/opt/n0jcg-winlink/tools/pat-winlink-n0jcg")
-PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "45"))
+PAT_BIN = os.environ.get("N0JCG_PAT_BIN", "/usr/local/bin/pat")
+# Packet RMS exchanges can take several minutes while downloading messages;
+# this is an exchange timeout, not an authentication timeout.
+PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "300"))
+# The browser must not receive a mailbox session until CMS secure login is
+# accepted. This wait covers RF connection and challenge exchange only; the
+# subsequent mailbox transfer remains asynchronous.
+PAT_LOGIN_WAIT = int(os.environ.get("N0JCG_PAT_LOGIN_WAIT_SECONDS", "90"))
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
@@ -56,6 +63,7 @@ EMAIL_RE = re.compile(r"^([A-Z0-9][A-Z0-9-]{2,15})@winlink\.org$", re.I)
 FAILURE_RE = re.compile(r"secure login failed|authentication failed|login failed|invalid password|unknown callsign", re.I)
 SUCCESS_RE = re.compile(r"CMS>|WL2K-|Remote accepted|B2F", re.I)
 SESSIONS = {}
+SYNC_JOBS = {}
 LOCK = threading.RLock()
 LOGIN_ATTEMPTS = {}
 LOGIN_WINDOW = 900
@@ -120,8 +128,9 @@ def write_pat_config(callsign, password, destination):
             raise RuntimeError(f"Pat configuration could not be read: {exc}") from exc
     if not isinstance(config, dict):
         raise RuntimeError("Pat configuration is not a JSON object")
-    if "telnet" not in config:
-        raise RuntimeError("Pat telnet profile is missing; run Pat configuration once before using webmail")
+    # The packet path uses AGWPE; do not require an unrelated telnet profile.
+    # Pat's official client can connect through the configured AGWPE transport
+    # with the per-login callsign supplied below.
     config.setdefault("agwpe", {})["addr"] = PAT_AGWPE_ADDR
     # Keep the RF AX.25 source identity separate from the logged-in Winlink
     # mailbox. Pat supports auxiliary callsigns as CALLSIGN:PASSWORD entries.
@@ -159,13 +168,15 @@ def pat_validate(callsign, password):
             config = Path(handle.name)
         write_pat_config(callsign, password, config)
         os.chmod(config, 0o600)
-        # Pat v0.16 accepts --mycall as a global option. Pass it explicitly so
+        # The official Pat client accepts --mycall as a global option. Pass it explicitly so
         # authentication cannot depend on whether a temporary config file was
         # discovered before the connect command is parsed.
         # Use the canonical CMS URL directly. A locally customized `telnet`
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
         connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
+        # The mailbox identity is dynamic per login. The AGWPE identity bridge
+        # rewrites only the RF AX.25 source to the configured packet callsign.
         station_call = callsign
         command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "connect", connect_url]
         try:
@@ -194,7 +205,133 @@ def pat_validate(callsign, password):
             config.unlink(missing_ok=True)
 
 
-def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
+def sync_status(callsign):
+    with LOCK:
+        job = SYNC_JOBS.get(callsign)
+        if not job:
+            return {"state": "IDLE", "stage": "idle", "message": "No mailbox synchronization is running."}
+        return {key: job.get(key) for key in ("state", "stage", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count")}
+
+
+def _pat_sync_worker(callsign, password, config, process, job):
+    """Keep the RF exchange alive after CMS authentication and report progress."""
+    try:
+        for raw_line in process.stdout:
+            line = raw_line.strip()
+            if not line:
+                continue
+            with LOCK:
+                job["updated_at"] = time.time()
+                job["last_line"] = line[-500:]
+                if "Connected to CMS" in line:
+                    job["stage"] = "cms_connected"
+                    job["message"] = "Connected to Winlink CMS; completing secure login."
+                elif line.startswith(";PQ"):
+                    job["stage"] = "authenticating"
+                    job["state"] = "AUTHENTICATED"
+                    job["message"] = "Winlink secure login accepted; requesting mailbox index."
+                    job["auth_event"].set()
+                elif re.search(r"\d+ proposal\(s\) received", line, re.I):
+                    job["pending_count"] = int(re.search(r"(\d+) proposal", line, re.I).group(1))
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "downloading"
+                    job["message"] = "Mailbox opened; downloading messages."
+                    job["auth_event"].set()
+                elif line.startswith(">FC EM"):
+                    job["outgoing_count"] = int(job.get("outgoing_count") or 0) + 1
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "uploading"
+                    job["message"] = f"Mailbox authenticated; sending {job['outgoing_count']} queued message(s)."
+                    job["auth_event"].set()
+                elif "No messages" in line or "0 proposal(s)" in line:
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "no_messages"
+                    job["message"] = "The RMS returned no downloadable proposals in this exchange."
+                    job["pending_count"] = 0
+                    job["auth_event"].set()
+                elif line.lstrip(">").strip() == "FQ":
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "no_messages"
+                    job["message"] = "The RMS returned no downloadable proposals in this exchange."
+                    job["pending_count"] = 0
+                    job["auth_event"].set()
+                elif re.search(r"Receiving \[|Sending \[|received", line, re.I):
+                    job["stage"] = "downloading"
+                    job["message"] = "Mailbox opened; message transfer in progress."
+        returncode = process.wait()
+        with LOCK:
+            if returncode == 0 and job["state"] == "AUTHENTICATED":
+                with sqlite3.connect(DB_PATH) as db:
+                    db.execute("UPDATE mailbox_queue SET state='SENT' WHERE callsign=? AND state='STAGED'", (callsign,))
+                    db.commit()
+                job["stage"] = "complete"
+                job["message"] = "Mailbox synchronization complete."
+            if job["state"] not in ("AUTHENTICATED", "ERROR"):
+                if returncode == 0:
+                    job["state"] = "ERROR"
+                    job["stage"] = "failed"
+                    job["message"] = "Winlink exchange ended before the mailbox result was confirmed."
+                    job["error_event"].set()
+                else:
+                    job["state"] = "ERROR"
+                    job["stage"] = "failed"
+                    job["message"] = "Winlink mailbox synchronization failed."
+                    job["error_event"].set()
+    except Exception as exc:
+        with LOCK:
+            job["state"] = "ERROR"
+            job["stage"] = "failed"
+            job["message"] = str(exc)
+            job["error_event"].set()
+    finally:
+        config.unlink(missing_ok=True)
+
+
+def start_pat_sync(callsign, password):
+    mailbox_dir = STATE_DIR / "mailbox" / callsign
+    mailbox_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(mailbox_dir, 0o700)
+    with LOCK:
+        existing = SYNC_JOBS.get(callsign)
+        if existing and existing.get("process") and existing["process"].poll() is None:
+            return existing
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="n0jcg-pat-sync-", suffix=".json", delete=False) as handle:
+        config = Path(handle.name)
+    write_pat_config(callsign, password, config)
+    os.chmod(config, 0o600)
+    connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
+    command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", connect_url]
+    try:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
+    except FileNotFoundError:
+        alternate = shutil.which("pat")
+        if not alternate:
+            config.unlink(missing_ok=True)
+            raise RuntimeError("Pat client is not installed on the appliance.")
+        command[0] = alternate
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
+    job = {"process": process, "state": "CONNECTING", "stage": "connecting", "message": "Connecting to the Packet RMS gateway.", "started_at": time.time(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
+    with LOCK:
+        SYNC_JOBS[callsign] = job
+    threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()
+    return job
+
+
+def wait_for_pat_auth(job, timeout=35):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if job["auth_event"].is_set():
+            return True, "Winlink secure login accepted; mailbox synchronization is continuing."
+        if job["error_event"].is_set():
+            return False, job.get("message", "Winlink authentication failed.")
+        process = job.get("process")
+        if process and process.poll() is not None:
+            return False, job.get("message", "Winlink authentication failed before secure login was accepted.")
+        time.sleep(0.25)
+    return False, "Winlink authentication timed out before secure login was accepted."
+
+
+def pat_mailbox_request(session, box, mid=None, method="GET", payload=None, suffix=""):
     """Ask a short-lived Pat HTTP process to decode mailbox messages."""
     config = None
     process = None
@@ -208,7 +345,7 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
         station_call = session["callsign"]
-        command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "--listen", "telnet", "--addr", f"127.0.0.1:{port}", "http"]
+        command = [PAT_BIN, "--config", str(config), "--mycall", station_call, "--mbox", str(mailbox_dir), "http", "--addr", f"127.0.0.1:{port}"]
         try:
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         except FileNotFoundError:
@@ -219,11 +356,30 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         endpoint = f"http://127.0.0.1:{port}/api/mailbox/{box}"
         if mid:
-            endpoint += f"/{mid}"
+            endpoint += f"/{urllib.parse.quote(str(mid), safe='')}"
+        endpoint += suffix
         request = urllib.request.Request(endpoint, method=method)
         if payload is not None:
-            request.data = json.dumps(payload).encode("utf-8")
-            request.add_header("Content-Type", "application/json")
+            attachment = payload.get("_attachment") if isinstance(payload, dict) else None
+            if suffix == "/read":
+                # Pat's read-state handler decodes JSON; mailbox composition
+                # posts below intentionally use form or multipart encoding.
+                request.data = json.dumps(payload).encode("utf-8")
+                request.add_header("Content-Type", "application/json")
+            elif attachment and attachment[2]:
+                boundary = f"----N0JCG{secrets.token_hex(12)}"
+                chunks = []
+                for key, value in payload.items():
+                    if key == "_attachment":
+                        continue
+                    chunks.extend([f"--{boundary}\r\nContent-Disposition: form-data; name=\"{key}\"\r\n\r\n".encode(), str(value).encode(), b"\r\n"])
+                name, content_type, data = attachment
+                chunks.extend([f"--{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"{name}\"\r\nContent-Type: {content_type or 'application/octet-stream'}\r\n\r\n".encode(), data, b"\r\n", f"--{boundary}--\r\n".encode()])
+                request.data = b"".join(chunks)
+                request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+            else:
+                request.data = urllib.parse.urlencode({key: value for key, value in payload.items() if key != "_attachment"}).encode("utf-8")
+                request.add_header("Content-Type", "application/x-www-form-urlencoded")
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             if process.poll() is not None:
@@ -238,7 +394,13 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
             try:
                 with urllib.request.urlopen(request, timeout=1) as response:
                     body = response.read().decode("utf-8")
-                    return json.loads(body) if body else {}
+                    if not body:
+                        return {}
+                    try:
+                        return json.loads(body)
+                    except json.JSONDecodeError:
+                        # Pat returns plain text for successful outbox posts.
+                        return {"text": body}
             except urllib.error.HTTPError as exc:
                 raise RuntimeError(f"Pat mailbox request failed ({exc.code}).") from exc
             except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError):
@@ -253,6 +415,34 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None):
                 process.kill()
         if config:
             config.unlink(missing_ok=True)
+
+
+def stage_queued_messages(session):
+    """Copy WES queue entries into Pat's official local outbox before connect."""
+    with sqlite3.connect(DB_PATH) as db:
+        rows = db.execute(
+            "SELECT id,recipient,subject,body,attachment_name,attachment_type,attachment_data FROM mailbox_queue WHERE callsign=? AND state='QUEUED' ORDER BY created_at",
+            (session["callsign"],),
+        ).fetchall()
+    staged = 0
+    for queue_id, recipient, subject, body, attachment_name, attachment_type, attachment_data in rows:
+        pat_mailbox_request(
+            session,
+            "out",
+            method="POST",
+            payload={
+                "to": recipient,
+                "subject": subject,
+                "body": body,
+                "date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "_attachment": (attachment_name, attachment_type, attachment_data),
+            },
+        )
+        with sqlite3.connect(DB_PATH) as db:
+            db.execute("UPDATE mailbox_queue SET state='STAGED' WHERE id=? AND callsign=? AND state='QUEUED'", (queue_id, session["callsign"]))
+            db.commit()
+        staged += 1
+    return staged
 
 
 def service_state(name):
@@ -281,7 +471,7 @@ def operator_diagnostics():
 
 
 def radio_profile():
-    values = {"N0JCG_PACKET_CALLSIGN": PAT_PACKET_CALLSIGN or "N0JCG-3", "N0JCG_PACKET_FREQUENCY": "145.070", "N0JCG_AUDIO_DEVICE": "plughw:Device,0", "N0JCG_PTT_DEVICE": "/dev/digirig-ptt"}
+    values = {"N0JCG_PACKET_CALLSIGN": PAT_PACKET_CALLSIGN or "N0JCG-3", "N0JCG_PACKET_FREQUENCY": "145.070", "N0JCG_AUDIO_DEVICE": "plughw:Device,0", "N0JCG_PTT_DEVICE": "/dev/digirig-ptt", "N0JCG_AUTO_SYNC_MINUTES": "30"}
     try:
         for line in RADIO_PROFILE_PATH.read_text(encoding="utf-8").splitlines():
             if "=" in line:
@@ -297,16 +487,20 @@ def apply_radio_profile(data):
     current = radio_profile()
     callsign = str(data.get("packet_callsign") or current["N0JCG_PACKET_CALLSIGN"]).strip().upper()
     frequency = str(data.get("frequency") or current["N0JCG_PACKET_FREQUENCY"]).strip()
+    auto_sync_minutes = str(data.get("auto_sync_minutes") or current["N0JCG_AUTO_SYNC_MINUTES"]).strip()
     if not re.fullmatch(r"[A-Z0-9-]{3,15}", callsign):
         raise ValueError("packet station ID is invalid")
     if not re.fullmatch(r"[0-9]{2,3}(?:\.[0-9]{1,6})?", frequency):
         raise ValueError("frequency must be entered in MHz, for example 145.070")
+    if not re.fullmatch(r"[0-9]+", auto_sync_minutes) or not 5 <= int(auto_sync_minutes) <= 1440:
+        raise ValueError("automatic mailbox sync must be between 5 and 1440 minutes")
     RADIO_PROFILE_PATH.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
     profile_lines = [
         f"N0JCG_PACKET_CALLSIGN={callsign}",
         f"N0JCG_PACKET_FREQUENCY={frequency}",
         f"N0JCG_AUDIO_DEVICE={current['N0JCG_AUDIO_DEVICE']}",
         f"N0JCG_PTT_DEVICE={current['N0JCG_PTT_DEVICE']}",
+        f"N0JCG_AUTO_SYNC_MINUTES={auto_sync_minutes}",
         "N0JCG_PACKET_MODE=1200-AFSK",
         "N0JCG_PAT_CONNECT_URL=ax25+agwpe:///N0JCG-10",
         "",
@@ -349,7 +543,7 @@ def session_from(handler):
 
 
 def session_view(session):
-    return {"authenticated": True, "email": session["email"], "callsign": session["callsign"], "source": "pat", "expires_at": int(session["last_seen"] + SESSION_IDLE)}
+    return {"authenticated": True, "email": session["email"], "callsign": session["callsign"], "source": "pat", "auth_state": sync_status(session["callsign"])["state"], "expires_at": int(session["last_seen"] + SESSION_IDLE)}
 
 
 def login_allowed(client_id):
@@ -441,18 +635,26 @@ class Handler(BaseHTTPRequestHandler):
                 password = str(data.get("password") or "")
                 if len(password) < 1 or len(password) > 256:
                     raise ValueError("Winlink password is required")
-                valid, evidence = pat_validate(callsign, password)
-                if not valid:
+                staged = stage_queued_messages({"callsign": callsign, "password": password})
+                job = start_pat_sync(callsign, password)
+                authenticated, evidence = wait_for_pat_auth(job, PAT_LOGIN_WAIT)
+                if not authenticated:
                     record_login_failure(client_id)
                     self.send_json(HTTPStatus.UNAUTHORIZED, {"error": evidence, "source": "pat"})
                     return
-                remember_account(email, callsign)
-                clear_login_failures(client_id)
                 token = create_session(email, callsign, password)
-                self.send_json(HTTPStatus.OK, {**session_view({"email": email, "callsign": callsign, "last_seen": time.time()}), "evidence": evidence}, f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_IDLE}")
+                self.send_json(HTTPStatus.OK, {**session_view({"email": email, "callsign": callsign, "last_seen": time.time()}), "evidence": evidence, "staged_for_send": staged, "sync": sync_status(callsign)}, f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_IDLE}")
                 return
             if self.path == "/api/v1/auth/register":
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "separate webmail registration is not used; sign in with Winlink"})
+                return
+            if self.path == "/api/v1/mail/sync":
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                job = start_pat_sync(session["callsign"], session["password"])
+                self.send_json(HTTPStatus.ACCEPTED, {"state": "SYNCING", "sync": sync_status(session["callsign"])})
                 return
             if self.path == "/api/v1/auth/logout":
                 session = session_from(self)
@@ -493,11 +695,18 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 folder = str(data.get("folder") or "inbox")
                 box = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}.get(folder)
+                if folder.startswith("custom:") and folder[7:].isdigit():
+                    with sqlite3.connect(DB_PATH) as db:
+                        assignment = db.execute("SELECT box FROM mailbox_folder_messages WHERE callsign=? AND folder_id=? AND mid=?", (session["callsign"], int(folder[7:]), parts[5])).fetchone()
+                    box = assignment[0] if assignment else None
                 if not box:
                     self.send_json(HTTPStatus.BAD_REQUEST, {"error": "unknown mailbox folder"})
                     return
                 try:
-                    pat_mailbox_request(session, box, parts[5], "POST", {"Read": True})
+                    # Pat's mailbox API exposes read-state changes at
+                    # /api/mailbox/{box}/{mid}/read.  Posting to the message
+                    # URL itself does not change the mailbox flag.
+                    pat_mailbox_request(session, box, parts[5], "POST", {"Read": True}, "/read")
                     self.send_json(HTTPStatus.OK, {"source": "pat", "state": "READY", "read": True})
                 except RuntimeError as exc:
                     self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "source": "pat"})
@@ -548,11 +757,24 @@ class Handler(BaseHTTPRequestHandler):
                 attachment_name, attachment_type, attachment_data = parse_attachment(data)
                 if not recipient or len(recipient) > 320 or len(subject) > 160 or not body or len(body) > 10000:
                     raise ValueError("recipient, subject, and message body are required")
+                draft_id = data.get("draft_id")
                 now = int(time.time())
                 with sqlite3.connect(DB_PATH) as db:
                     cursor = db.execute("INSERT INTO mailbox_queue(callsign,recipient,subject,body,attachment_name,attachment_type,attachment_data,state,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (session["callsign"], recipient, subject, body, attachment_name, attachment_type, attachment_data, "QUEUED", now))
+                    if draft_id and str(draft_id).isdigit():
+                        db.execute("DELETE FROM mailbox_drafts WHERE id=? AND callsign=?", (int(draft_id), session["callsign"]))
                     db.commit()
-                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "QUEUED", "queued": True, "id": int(cursor.lastrowid), "created_at": now})
+                sync_error = ""
+                staged = 0
+                try:
+                    staged = stage_queued_messages(session)
+                    start_pat_sync(session["callsign"], session["password"])
+                except RuntimeError as exc:
+                    # Keep the local queue record intact if staging or the
+                    # radio exchange cannot start; the next login/Refresh
+                    # will retry it.
+                    sync_error = str(exc)
+                self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "QUEUED", "queued": True, "draft_deleted": bool(draft_id and str(draft_id).isdigit()), "id": int(cursor.lastrowid), "created_at": now, "staged_for_send": staged, "sync": sync_status(session["callsign"]), "sync_error": sync_error})
                 return
             if self.path == "/api/v1/mail/folders":
                 session = session_from(self)
@@ -589,7 +811,12 @@ class Handler(BaseHTTPRequestHandler):
                     if not owner:
                         self.send_json(HTTPStatus.NOT_FOUND, {"error": "folder not found"})
                         return
-                    db.execute("INSERT OR REPLACE INTO mailbox_folder_messages(callsign,folder_id,box,mid,assigned_at) VALUES(?,?,?,?,?)", (session["callsign"], int(folder_id), box, parts[5], int(time.time())))
+                    # A message belongs to one user folder at a time. Remove
+                    # any prior assignment so a move removes it from the
+                    # source folder and repeated moves do not create stale
+                    # copies in custom folders.
+                    db.execute("DELETE FROM mailbox_folder_messages WHERE callsign=? AND mid=?", (session["callsign"], parts[5]))
+                    db.execute("INSERT INTO mailbox_folder_messages(callsign,folder_id,box,mid,assigned_at) VALUES(?,?,?,?,?)", (session["callsign"], int(folder_id), box, parts[5], int(time.time())))
                     db.commit()
                 self.send_json(HTTPStatus.OK, {"source": "local_queue", "moved": True, "folder_id": int(folder_id)})
                 return
@@ -613,6 +840,18 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_json(HTTPStatus.OK, session_view(session))
             return
+        if self.path == "/api/v1/mail/sync":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+            else:
+                self.send_json(HTTPStatus.OK, sync_status(session["callsign"]))
+            return
+        if self.path == "/api/v1/mail/settings":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+            else:
+                self.send_json(HTTPStatus.OK, {"auto_sync_minutes": int(radio_profile()["N0JCG_AUTO_SYNC_MINUTES"])})
+            return
         if self.path == "/api/v1/mail/status":
             if not session:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
@@ -633,12 +872,30 @@ class Handler(BaseHTTPRequestHandler):
             if not session:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
                 return
+            current_sync = sync_status(session["callsign"])
+            # Keep previously downloaded mail visible while a new RF exchange
+            # is running. The old behavior returned an empty list for the
+            # entire duration of a download, which made a populated mailbox
+            # appear to contain zero messages.
+            # Pat's --mbox root contains a callsign-named mailbox directory.
+            inbox_dir = STATE_DIR / "mailbox" / session["callsign"] / session["callsign"] / "in"
+            has_local_inbox = inbox_dir.is_dir() and any(inbox_dir.iterdir())
+            if (current_sync["state"] in ("CONNECTING", "AUTHENTICATING") or current_sync["stage"] in ("downloading", "uploading")) and not has_local_inbox:
+                self.send_json(HTTPStatus.OK, {"source": "pat", "state": "SYNCING", "sync": current_sync, "messages": []})
+                return
+            if current_sync.get("stage") == "no_messages":
+                # A sync can legitimately return no *new* proposals while
+                # Pat still has previously downloaded mail. Do not hide that
+                # local mailbox just because the latest exchange was empty.
+                if not has_local_inbox:
+                    self.send_json(HTTPStatus.OK, {"source": "pat", "state": "NO_MESSAGES", "sync": current_sync, "messages": []})
+                    return
             try:
                 path, _, query = self.path.partition("?")
-                params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
+                params = {key: values[-1] for key, values in urllib.parse.parse_qs(query, keep_blank_values=True).items()}
                 folder = params.get("folder", "inbox")
                 prefix = "/api/v1/mail/messages/"
-                mid = path[len(prefix):] if path.startswith(prefix) else ""
+                mid = urllib.parse.unquote(path[len(prefix):]) if path.startswith(prefix) else ""
                 boxes = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}
                 box = boxes.get(folder)
                 if folder.startswith("custom:"):
@@ -653,6 +910,11 @@ class Handler(BaseHTTPRequestHandler):
                 if mid and ("/" in mid or not re.fullmatch(r"[A-Za-z0-9._-]+", mid)):
                     raise ValueError("invalid message id")
                 payload = pat_mailbox_request(session, box, mid or None)
+                if not mid:
+                    # Custom-folder assignment is a move, not a label.
+                    with sqlite3.connect(DB_PATH) as db:
+                        assigned = {row[0] for row in db.execute("SELECT mid FROM mailbox_folder_messages WHERE callsign=?", (session["callsign"],)).fetchall()}
+                    payload = [message for message in payload if str(message.get("MID", "")) not in assigned]
                 self.send_json(HTTPStatus.OK, {"source": "pat", "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "state": "READY", "folder": folder, "messages": payload if not mid else [], "message": payload if mid else None})
             except ValueError as exc:
                 self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -680,7 +942,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
                 return
             with sqlite3.connect(DB_PATH) as db:
-                rows = db.execute("SELECT id,recipient,subject,state,created_at FROM mailbox_queue WHERE callsign=? ORDER BY created_at DESC", (session["callsign"],)).fetchall()
+                rows = db.execute("SELECT id,recipient,subject,state,created_at FROM mailbox_queue WHERE callsign=? AND state IN ('QUEUED','STAGED') ORDER BY created_at DESC", (session["callsign"],)).fetchall()
             self.send_json(HTTPStatus.OK, {"source": "local_queue", "state": "READY", "queue": [{"id": row[0], "recipient": row[1], "subject": row[2], "state": row[3], "created_at": row[4]} for row in rows]})
             return
         if self.path == "/api/v1/mail/folders":
@@ -783,15 +1045,24 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
             return
         path, _, query = self.path.partition("?")
-        mid = path[len(prefix):]
-        params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
+        mid = urllib.parse.unquote(path[len(prefix):])
+        params = {key: values[-1] for key, values in urllib.parse.parse_qs(query, keep_blank_values=True).items()}
         folder = params.get("folder", "inbox")
         box = {"inbox": "in", "sent": "sent", "drafts": "out", "archive": "archive"}.get(folder)
+        mid = urllib.parse.unquote(mid)
+        if folder.startswith("custom:") and folder[7:].isdigit():
+            with sqlite3.connect(DB_PATH) as db:
+                assignment = db.execute("SELECT box FROM mailbox_folder_messages WHERE callsign=? AND folder_id=? AND mid=?", (session["callsign"], int(folder[7:]), mid)).fetchone()
+            box = assignment[0] if assignment else None
         if not box or not re.fullmatch(r"[A-Za-z0-9._-]+", mid):
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid mailbox message"})
             return
         try:
             pat_mailbox_request(session, box, mid, "DELETE")
+            if folder.startswith("custom:"):
+                with sqlite3.connect(DB_PATH) as db:
+                    db.execute("DELETE FROM mailbox_folder_messages WHERE callsign=? AND folder_id=? AND mid=?", (session["callsign"], int(folder[7:]), mid))
+                    db.commit()
             self.send_json(HTTPStatus.OK, {"source": "pat", "state": "READY", "deleted": True})
         except RuntimeError as exc:
             self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "source": "pat"})

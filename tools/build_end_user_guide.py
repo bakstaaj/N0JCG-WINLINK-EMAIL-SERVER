@@ -119,7 +119,7 @@ def add_header_footer(doc):
         set_run(r, size=8, color=SLATE, bold=True)
         first_footer = section.first_page_footer.paragraphs[0]
         first_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.0    Page 1"), size=8, color=SLATE)
+        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.1    Page 1"), size=8, color=SLATE)
         add_bottom_rule(first_footer)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -233,7 +233,7 @@ def build():
     p.paragraph_format.space_after = Pt(26)
     set_run(p.add_run("A complete guide to the Raspberry Pi client appliance, Winlink mailbox access, DigiRig Mobile integration, and safe Packet RMS operation."), size=11, color=NAVY)
     add_table(doc, ["Release", "Publication"], [
-        ("0.1.0", "August 2026"),
+        ("0.1.1", "August 2026"),
         ("PRODUCT ROLE\nClient-side Winlink email", "AUDIENCE\nOperators and mailbox users"),
     ], [3.42, 3.42])
     doc.add_page_break()
@@ -305,24 +305,26 @@ def build():
     doc.add_heading("Operator console", level=2)
     doc.add_paragraph("Sign in to the operator console with the credentials created by the installer. Review the host identity, service state, DigiRig/USB detection, Winlink Client readiness, radio profile, Packet settings, and diagnostics before connecting RF equipment.")
     doc.add_heading("Webmail account", level=2)
-    doc.add_paragraph("Open the webmail address and select Sign in with Winlink. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign.")
+    doc.add_paragraph("Open the webmail address and select Sign in with Winlink. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign. Webmail remains closed until Winlink CMS secure login is accepted; failed or timed-out authentication never opens a session or mailbox.")
     add_callout(doc, "PRIVATE MAILBOX MODEL", "Mailbox access is isolated by callsign. A user cannot select another user’s mailbox from a URL or browser control.", PALE_CYAN)
     add_screenshot(doc, "webmail-inbox.png", "Figure 1. N0JCG webmail inbox and mailbox status on the client appliance.")
     doc.add_page_break()
 
     doc.add_heading("4. Everyday webmail", level=1)
-    doc.add_heading("Compose a message", level=2)
-    doc.add_paragraph("Select New message to open a blank form. Enter the Winlink recipient, subject, and message body. Select Save draft when work should remain local, or use the send control when the operator has enabled a verified transport path.")
+    doc.add_heading("Compose, templates, and drafts", level=2)
+    doc.add_paragraph("Select Compose to open a blank form. At the top of the form, use Choose template to select an installed Winlink Standard Form, complete its fields, and insert an editable message. The Signature control is beside Choose template. Enter the Winlink recipient, subject, and message body. Select Save draft when work should remain local, or queue the message when the operator has enabled a verified transport path.")
     add_screenshot(doc, "compose-message.png", "Figure 2. New message panel with attachment controls and the N0JCG navigation shell.")
     doc.add_heading("Drafts, attachments, and signature", level=2)
     add_bullets(doc, [
-        "The Drafts counter updates after saving. Open a draft to continue editing or delete it from the Drafts panel.",
+        "The Drafts counter updates after saving. Open a draft to continue editing; queuing an opened draft removes it from Drafts and places it in Send queue.",
         "Attachments are limited to 100 KB. A warning appears above 10 KB because packet-radio transfer may be slow.",
         "Select Signature to save a per-user signature. It is restored after the next login for that Winlink callsign.",
         "Use Log out when leaving a shared workstation.",
     ])
     doc.add_heading("Folders", level=2)
-    doc.add_paragraph("Custom folders are shown indented under Inbox. Create and delete folders from Manage folders, then drag an Inbox message onto a folder to organize it.")
+    doc.add_paragraph("Custom folders are shown indented under Inbox. Create and delete folders from Manage folders, then drag an Inbox message onto a folder to organize it. Moving a message removes it from its original folder. Opening a message marks it read. Inbox, Sent, and custom folders provide checkboxes for bulk Mark selected read and Delete selected actions.")
+    doc.add_heading("Send queue and automatic synchronization", level=2)
+    doc.add_paragraph("Queue message stages the message into Pat’s official outbox and immediately starts a Packet RMS synchronization. The Send queue shows queued, staged, and transmission state. After a successful send, the message is removed from Send queue and its counter updates automatically. The operator configures automatic mailbox synchronization in the operator console under Packet station → Automatic mailbox sync (minutes), from 5 to 1440 minutes; the default is 30 minutes.")
     doc.add_page_break()
 
     doc.add_heading("5. Connect and verify the radio", level=1)
@@ -344,9 +346,9 @@ def build():
 
     doc.add_heading("6. Troubleshooting", level=1)
     doc.add_heading("Mailbox unavailable", level=2)
-    doc.add_paragraph("This means the Winlink account was authenticated, but the local mailbox service is not currently available. It is not a request for the user to type a command. Connect the radio and run a mailbox synchronization, then select Refresh. If the message persists, the operator should review the client service and diagnostics.")
-    doc.add_heading("Login fails", level=2)
-    doc.add_paragraph("Confirm the Winlink address and secure-login password. Check the Pi network connection and system time. Repeated failed attempts are rate-limited for protection.")
+    doc.add_paragraph("This means the Winlink account was authenticated, but the local mailbox service is not currently available. It is not a request for the user to type a command. Connect the radio and select Refresh to start a mailbox synchronization. If the message persists, the operator should review the client service and diagnostics.")
+    doc.add_heading("Login fails or remains on Validating through the Winlink client…", level=2)
+    doc.add_paragraph("Confirm the Winlink address and secure-login password. Check the Pi network connection, radio power, DigiRig cabling, frequency, packet station ID, RMS target, and system time. The login screen intentionally remains open until secure login is accepted; no mailbox is exposed during this wait. A failed RF exchange returns the user to the login screen. Repeated failed attempts are rate-limited for protection.")
     doc.add_heading("Device detected but not ready", level=2)
     doc.add_paragraph("Check the correct radio cable, audio routing, serial/PTT configuration, and radio power. Do not enable transmit based on USB detection alone.")
     doc.add_heading("Deployment verification fails", level=2)
@@ -366,6 +368,8 @@ def build():
         ("Product host role", "PI-WINLINK"),
         ("Maximum attachment", "100 KB"),
         ("Attachment warning", "Above 10 KB"),
+        ("Automatic mailbox sync", "Operator setting, 5–1440 minutes; default 30"),
+        ("Login security", "Webmail opens only after Winlink secure-login acceptance"),
     ], [2.1, 4.7])
     add_callout(doc, "SUPPORT CHECKLIST", "When requesting help, include the appliance IP address, the page being used, the exact visible message, whether the radio is connected, and the output of inspect_pi_webmail.sh. Never include passwords.", PALE_BLUE)
     doc.save(OUT)

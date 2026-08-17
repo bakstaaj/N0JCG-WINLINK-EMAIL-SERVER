@@ -75,7 +75,22 @@ sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/too
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools/apply_radio_profile.sh"
 sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tools/agwpe_identity_bridge.py"
-sudo install -m 0755 "$REPO_ROOT/tools/pat-winlink-n0jcg" "$APP_ROOT/tools/pat-winlink-n0jcg"
+
+# Install the unmodified official Pat ARM64 client. WES supplies the logged-in
+# Winlink callsign dynamically; the AGWPE bridge supplies the local RF SSID.
+PAT_VERSION="${N0JCG_PAT_VERSION:-0.16.0}"
+PAT_ARCHIVE="pat_${PAT_VERSION}_linux_arm64.tar.gz"
+PAT_URL="https://github.com/la5nta/pat/releases/download/v${PAT_VERSION}/${PAT_ARCHIVE}"
+PAT_TMP="$(mktemp -d)"
+trap 'rm -rf "$PAT_TMP"' EXIT
+if [[ ! -x /usr/local/bin/pat ]] || ! /usr/local/bin/pat version 2>/dev/null | grep -q "Pat v${PAT_VERSION}"; then
+    curl --fail --location --silent --show-error "$PAT_URL" -o "$PAT_TMP/$PAT_ARCHIVE"
+    tar -xzf "$PAT_TMP/$PAT_ARCHIVE" -C "$PAT_TMP"
+    PAT_BINARY="$(find "$PAT_TMP" -type f -name pat -print -quit)"
+    [[ -n "$PAT_BINARY" ]] || { echo "FAIL: official Pat binary was not found in $PAT_ARCHIVE" >&2; exit 1; }
+    sudo install -m 0755 "$PAT_BINARY" /usr/local/bin/pat
+fi
+sudo /usr/local/bin/pat version
 sudo install -m 0644 "$REPO_ROOT/config/direwolf-n0jcg.conf.example" "$APP_ROOT/config/direwolf-n0jcg.conf.example"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"

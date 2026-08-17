@@ -10,7 +10,6 @@ Group=@APP_USER@
 ExecStart=/usr/bin/python3 /opt/n0jcg-winlink/api/n0jcg_webmail.py
 Restart=on-failure
 RestartSec=3
-NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only

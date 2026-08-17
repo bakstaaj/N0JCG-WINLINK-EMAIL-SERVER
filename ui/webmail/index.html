@@ -22,6 +22,9 @@
     .mail-table td { color:var(--n0-color-text); }
     .mail-empty { padding:var(--n0-space-8); border:1px dashed var(--n0-color-border); border-radius:var(--n0-radius-md); color:var(--n0-color-text-muted); text-align:center; }
     .compose { display:grid; gap:var(--n0-space-4); }
+    .compose-top-actions { display:flex; flex-wrap:wrap; gap:var(--n0-space-2); justify-content:flex-end; }
+    .compose-top-actions button { border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); padding:9px 13px; color:var(--n0-color-navy); background:var(--n0-color-white); font:inherit; font-weight:700; cursor:pointer; }
+    .compose-top-actions button:hover { color:var(--n0-color-white); background:var(--n0-color-blue); }
     .compose label { display:grid; gap:var(--n0-space-2); color:var(--n0-color-text-muted); font-size:.85rem; font-weight:700; }
     .compose input, .compose textarea { width:100%; padding:11px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
     .compose textarea { min-height:220px; resize:vertical; }
@@ -46,7 +49,10 @@
     .header-button { border:1px solid rgb(255 255 255 / 45%); border-radius:var(--n0-radius-sm); padding:7px 11px; color:var(--n0-color-white); background:transparent; font:inherit; font-size:.82rem; font-weight:700; cursor:pointer; }
     .header-button:hover { color:var(--n0-color-navy); background:var(--n0-color-white); }
     .message-list { display:grid; gap:var(--n0-space-2); }
-    .message-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(140px,.5fr) auto; gap:var(--n0-space-3); padding:12px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); color:var(--n0-color-text); background:var(--n0-color-white); text-align:left; cursor:pointer; font:inherit; }
+    .bulk-actions { display:flex; flex-wrap:wrap; gap:var(--n0-space-2); margin-bottom:var(--n0-space-2); }
+    .bulk-actions button { border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); padding:8px 11px; color:var(--n0-color-navy); background:var(--n0-color-white); font:inherit; cursor:pointer; }
+    .bulk-actions button:hover { color:var(--n0-color-white); background:var(--n0-color-blue); }
+    .message-row { display:grid; grid-template-columns:auto minmax(0,2fr) minmax(0,1fr) minmax(11rem,auto); align-items:center; gap:var(--n0-space-3); padding:12px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); color:var(--n0-color-text); background:var(--n0-color-white); text-align:left; cursor:pointer; font:inherit; }
     .message-row:hover { border-color:var(--n0-color-blue); background:var(--n0-color-mist); }
     .message-row.unread { border-left:4px solid var(--n0-color-cyan); font-weight:700; }
     .draft-row { display:flex; align-items:center; }
@@ -55,7 +61,9 @@
     .queue-row { display:flex; align-items:center; gap:var(--n0-space-3); }
     .queue-summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(140px,.5fr) auto; flex:1; gap:var(--n0-space-3); }
     .queue-cancel { border:0; border-radius:var(--n0-radius-sm); padding:7px 10px; color:#9b2c2c; background:#fff0f0; font-weight:700; cursor:pointer; }
-    .message-row span, .message-row time { color:var(--n0-color-text-muted); font-size:.88rem; }
+    .message-row > * { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+    .message-select { width:1.1rem; height:1.1rem; margin:0; accent-color:var(--n0-color-blue); cursor:pointer; }
+    .message-row span, .message-row time { color:var(--n0-color-text-muted); font-size:.88rem; white-space:nowrap; }
     .message-detail pre { white-space:pre-wrap; font:inherit; line-height:1.6; }
     .message-detail button { border:0; border-radius:var(--n0-radius-sm); padding:10px 14px; color:var(--n0-color-white); background:var(--n0-color-blue); font-weight:700; cursor:pointer; }
     .message-actions { display:flex; flex-wrap:wrap; gap:var(--n0-space-3); }
@@ -79,7 +87,7 @@
     .custom-folder-nav button { border:0; padding:7px 8px; color:var(--n0-color-text-muted); background:transparent; text-align:left; font:inherit; cursor:pointer; }
     .custom-folder-nav button:hover { color:var(--n0-color-blue); }
     .folder-count { display:inline-grid; min-width:1.5em; min-height:1.5em; place-items:center; margin-left:4px; padding:0 4px; border-radius:999px; color:var(--n0-color-navy); background:var(--n0-color-mist); font-size:.78em; }
-    @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(2,minmax(0,1fr)); } .mail-nav button { text-align:center; min-height:44px; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } .mail-toolbar { align-items:flex-start; flex-wrap:wrap; } .mail-toolbar > div { display:flex; flex-wrap:wrap; gap:var(--n0-space-2); } .mail-toolbar button { min-height:44px; } .folder-manager form { flex-direction:column; } .template-filters { grid-template-columns:1fr; } .message-row, .draft-open, .queue-summary { grid-template-columns:1fr; gap:4px; } .draft-row, .queue-row { align-items:stretch; flex-direction:column; } .draft-delete, .queue-cancel { align-self:flex-start; } }
+    @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(2,minmax(0,1fr)); } .mail-nav button { text-align:center; min-height:44px; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } .mail-toolbar { align-items:flex-start; flex-wrap:wrap; } .mail-toolbar > div { display:flex; flex-wrap:wrap; gap:var(--n0-space-2); } .mail-toolbar button { min-height:44px; } .folder-manager form { flex-direction:column; } .template-filters { grid-template-columns:1fr; } .message-row { grid-template-columns:auto 1fr; gap:4px; } .message-row span, .message-row time { grid-column:2; } .draft-open, .queue-summary { grid-template-columns:1fr; gap:4px; } .draft-row, .queue-row { align-items:stretch; flex-direction:column; } .draft-delete, .queue-cancel { align-self:flex-start; } }
     @media (max-width:480px) { .mail-nav { gap:6px; } .mail-nav button { padding:10px 8px; font-size:.9rem; } .mail-toolbar h2 { width:100%; } .mail-toolbar > div { width:100%; } .mail-toolbar button { flex:1 1 auto; } .auth-gate { margin-bottom:12px; } .mail-empty { padding:24px 14px; } }
   </style>
 </head>
@@ -109,12 +117,14 @@
         <button data-action="folders">Manage folders</button>
       </nav>
       <section class="card mail-panel" aria-live="polite">
-        <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="templates">Templates</button> <button type="button" data-action="signature">Signature</button> <button type="button" data-action="refresh">Refresh</button> <button type="button" data-action="compose">New message</button></div></div>
+        <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="refresh">Refresh</button></div></div>
+        <p id="mail-sync-status" class="auth-message" role="status" hidden></p>
         <div id="folder-view" class="mail-empty"><strong>No mailbox connection</strong><p>The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.</p></div>
         <form id="signature-view" class="signature-view" hidden><h3>Email signature</h3><p class="muted">This signature is saved separately for your authenticated Winlink callsign and added to new messages.</p><textarea name="signature" maxlength="2000" placeholder="73,\nYOURCALL"></textarea><p class="auth-message" role="status"></p><div class="compose-actions"><button type="submit">Save signature</button><button type="button" class="secondary" data-action="cancel-signature">Cancel</button></div></form>
         <section id="folder-manager" class="folder-manager" hidden><h3>Manage folders</h3><p class="muted">Create folders for this Winlink account. Built-in mailbox folders cannot be deleted.</p><form id="folder-form"><input name="name" maxlength="40" placeholder="Folder name" required><button type="submit">Create folder</button></form><p id="folder-message" class="auth-message" role="status"></p><div id="custom-folder-list"></div><button type="button" class="secondary" data-action="cancel-folders">Done</button></section>
         <section id="template-view" class="template-view" hidden><h3>Winlink Standard Forms</h3><p class="muted">Choose an official form, complete its fields, and insert an editable plain-text message. The operator must install or update the Standard Forms library first.</p><div id="template-content" class="mail-empty">Loading templates…</div><button type="button" class="secondary" data-action="cancel-templates">Done</button></section>
         <form id="compose-view" class="compose" hidden>
+          <div class="compose-top-actions"><button type="button" class="secondary" data-action="templates">Choose template</button><button type="button" class="secondary" data-action="signature">Signature</button></div>
           <label>To<input name="to" type="email" autocomplete="email" placeholder="recipient@example.net" required></label>
           <label>Subject<input name="subject" maxlength="160" required></label>
           <label>Message<textarea name="body" maxlength="10000" required></textarea></label>
@@ -126,6 +136,6 @@
     </section>
   </main>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> Client-side appliance, not an RMS gateway</footer>
-  <script src="webmail.js?v=20260817-forms-filter"></script>
+  <script src="webmail.js?v=20260817-compose-template"></script>
 </body>
 </html>

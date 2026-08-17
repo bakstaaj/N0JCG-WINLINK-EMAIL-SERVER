@@ -2,8 +2,8 @@
 
 ## End User Guide
 
-**N0JCG Open Radio Platform**  
-**Document version:** 1.0  
+**N0JCG Open Radio Platform**
+**Document version:** 1.1
 **Appliance host:** `PI-WINLINK`
 
 ### What this appliance does
@@ -126,7 +126,7 @@ The operator console is protected because it can change appliance configuration 
 
 ### Webmail account
 
-Open `/webmail/` and select **Sign in with Winlink**. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign.
+Open `/webmail/` and select **Sign in with Winlink**. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign. Webmail remains closed until Winlink CMS secure login is accepted; failed or timed-out authentication never opens a session or mailbox.
 
 The mailbox is isolated by callsign. A user cannot select another user’s mailbox from a URL or browser control.
 
@@ -136,9 +136,13 @@ The mailbox is isolated by callsign. A user cannot select another user’s mailb
 
 The Inbox is the default panel. Sent, Drafts, and Send queue are available from the left navigation. User-created folders appear indented under Inbox. Drag an Inbox message onto a custom folder to organize it.
 
-### Compose and drafts
+### Compose, templates, and drafts
 
-Select **New message** for a blank message. Select **Save draft** to keep work locally on the appliance. The Drafts counter updates after saving. Open a draft to continue editing, or delete it from the Drafts panel.
+Select **Compose** for a blank message. Use **Choose template** at the top of the Compose form to select an installed Winlink Standard Form, fill its fields, and insert the editable message. Use **Signature** beside it to manage the per-user signature. Select **Save draft** to keep work locally on the appliance. The Drafts counter updates after saving. Open a draft to continue editing; queuing an opened draft removes it from Drafts and places it in Send queue.
+
+### Send queue and automatic synchronization
+
+Selecting **Queue message** stages the message into Pat’s official outbox and immediately starts a Packet RMS synchronization. The Send queue shows queued, staged, and transmission state. After a successful send, the message is removed from Send queue and its counter updates automatically. The operator configures automatic mailbox synchronization in `/ui/` under **Packet station → Automatic mailbox sync (minutes)**. The allowed range is 5 to 1440 minutes; the default is 30 minutes.
 
 Attachments are limited to 100 KB. The interface warns when an attachment is larger than 10 KB because packet-radio transfer may be slow.
 
@@ -149,6 +153,10 @@ Select **Signature** to save a per-user signature. The signature is stored with 
 ### Logout
 
 Use **Log out** in the top navigation when leaving the appliance. Log out from both the operator console and webmail when using a shared workstation.
+
+### Bulk message actions
+
+Inbox, Sent, and custom folders support checkboxes for selecting multiple messages. Use **Mark selected read** or **Delete selected** to apply an action to all selected messages. Moving a message to a custom folder removes it from its original folder. Opening a message marks it read and removes its unread emphasis.
 
 ## 5. Connecting the radio
 
@@ -168,11 +176,11 @@ After the software and account setup are complete:
 
 ### “Mailbox unavailable”
 
-This means the Winlink account was authenticated, but the local mailbox service is not currently available. It is not a request for the user to type a command. Connect the radio and run a mailbox synchronization, then select **Refresh**. If the message persists, the operator should review the client service and diagnostics.
+This means the Winlink account was authenticated, but the local mailbox service is not currently available. It is not a request for the user to type a command. Connect the radio and select **Refresh** to start a mailbox synchronization. If the message persists, the operator should review the client service and diagnostics.
 
-### Login fails
+### Login fails or remains on “Validating through the Winlink client…”
 
-Confirm the Winlink address and secure-login password. Check the Pi network connection and system time. Repeated failed attempts are rate-limited for protection.
+Confirm the Winlink address and secure-login password. Check the Pi network connection, radio power, DigiRig cabling, frequency, packet station ID, RMS target, and system time. The login screen intentionally remains open until secure login is accepted; no mailbox is exposed during this wait. A failed RF exchange returns the user to the login screen. Repeated failed attempts are rate-limited for protection.
 
 ### Device is detected but not ready
 
@@ -204,5 +212,7 @@ Use the operator console for configuration and diagnostics. Use webmail for mail
 | Product host role | `PI-WINLINK` |
 | Maximum attachment | 100 KB |
 | Attachment warning | Above 10 KB |
+| Automatic mailbox sync | Operator setting, 5–1440 minutes; default 30 |
+| Login security | Webmail opens only after Winlink secure-login acceptance |
 
 *N0JCG Winlink Email Server | N0JCG Open Radio Platform | Client-side appliance, not an RMS gateway*
