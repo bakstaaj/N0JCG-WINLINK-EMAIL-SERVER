@@ -286,7 +286,7 @@ def operator_diagnostics():
 
 
 def radio_profile():
-    values = {"N0JCG_PACKET_CALLSIGN": PAT_PACKET_CALLSIGN or "N0JCG-3", "N0JCG_PACKET_FREQUENCY": "145.070", "N0JCG_AUDIO_DEVICE": "plughw:1,0", "N0JCG_PTT_DEVICE": "/dev/digirig-ptt"}
+    values = {"N0JCG_PACKET_CALLSIGN": PAT_PACKET_CALLSIGN or "N0JCG-3", "N0JCG_PACKET_FREQUENCY": "145.070", "N0JCG_AUDIO_DEVICE": "plughw:Device,0", "N0JCG_PTT_DEVICE": "/dev/digirig-ptt"}
     try:
         for line in RADIO_PROFILE_PATH.read_text(encoding="utf-8").splitlines():
             if "=" in line:

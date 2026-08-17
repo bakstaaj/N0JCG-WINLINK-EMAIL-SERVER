@@ -9,8 +9,8 @@ Type=simple
 User=@APP_USER@
 Group=@APP_USER@
 SupplementaryGroups=audio input dialout
-ExecStartPre=/usr/bin/amixer -c 1 cset numid=8 2
-ExecStartPre=/usr/bin/amixer -c 1 cset numid=9 0
+ExecStartPre=/usr/bin/amixer -c Device cset numid=8 2
+ExecStartPre=/usr/bin/amixer -c Device cset numid=9 0
 ExecStart=/usr/bin/direwolf -c /etc/n0jcg-winlink/direwolf.conf -t 0
 Restart=on-failure
 RestartSec=3

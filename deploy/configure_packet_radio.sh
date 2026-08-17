@@ -7,7 +7,7 @@ PROFILE_FILE="/var/lib/n0jcg-winlink-webmail/radio-profile.conf"
 [[ "${EUID:-$(id -u)}" == "0" ]] || { echo "FAIL: run with sudo" >&2; exit 1; }
 
 CALLSIGN="${N0JCG_PACKET_CALLSIGN:-N0JCG-3}"
-AUDIO_DEVICE="${N0JCG_AUDIO_DEVICE:-plughw:1,0}"
+AUDIO_DEVICE="${N0JCG_AUDIO_DEVICE:-plughw:Device,0}"
 PTT_DEVICE="${N0JCG_PTT_DEVICE:-/dev/digirig-serial}"
 FREQUENCY="${N0JCG_PACKET_FREQUENCY:-145.070}"
 
@@ -20,7 +20,7 @@ fi
 
 [[ "$CALLSIGN" =~ ^[A-Z0-9-]{3,15}$ ]] || { echo "FAIL: invalid packet callsign" >&2; exit 1; }
 [[ -e "$PTT_DEVICE" ]] || { echo "FAIL: PTT device not found: $PTT_DEVICE" >&2; exit 1; }
-[[ "$AUDIO_DEVICE" =~ ^(plughw|hw):[0-9]+,[0-9]+$ ]] || { echo "FAIL: audio device must look like plughw:1,0" >&2; exit 1; }
+[[ "$AUDIO_DEVICE" =~ ^(plughw|hw):([A-Za-z0-9_=]+),[0-9]+$ ]] || { echo "FAIL: audio device must identify an ALSA card, for example plughw:Device,0" >&2; exit 1; }
 
 install -d -m 0755 "$CONFIG_DIR"
 install -d -m 0750 -o "${N0JCG_APP_USER:-pi}" -g "${N0JCG_APP_USER:-pi}" "$(dirname "$PROFILE_FILE")"

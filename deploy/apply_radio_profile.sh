@@ -7,7 +7,7 @@ PROFILE="/var/lib/n0jcg-winlink-webmail/radio-profile.conf"
 # shellcheck disable=SC1090
 source "$PROFILE"
 [[ "${N0JCG_PACKET_CALLSIGN:-}" =~ ^[A-Z0-9-]{3,15}$ ]] || { echo "FAIL: invalid packet callsign" >&2; exit 1; }
-[[ "${N0JCG_AUDIO_DEVICE:-}" =~ ^(plughw|hw):[0-9]+,[0-9]+$ ]] || { echo "FAIL: invalid audio device" >&2; exit 1; }
+[[ "${N0JCG_AUDIO_DEVICE:-}" =~ ^(plughw|hw):([A-Za-z0-9_=]+),[0-9]+$ ]] || { echo "FAIL: invalid audio device" >&2; exit 1; }
 [[ -e "${N0JCG_PTT_DEVICE:-}" ]] || { echo "FAIL: PTT device not found" >&2; exit 1; }
 install -d -m 0755 /etc/n0jcg-winlink
 cat > /etc/n0jcg-winlink/direwolf.conf <<EOF
