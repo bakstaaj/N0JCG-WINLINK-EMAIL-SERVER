@@ -560,6 +560,11 @@
     try {
       const response = await fetch('/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       const body = await response.json().catch(() => ({}));
+      if (response.status === 429) {
+        const retrySeconds = Math.max(0, Number(body.retry_after) || 0);
+        const retryMinutes = Math.max(1, Math.ceil(retrySeconds / 60));
+        throw new Error(`Too many login attempts. Try again in about ${retryMinutes} minute${retryMinutes === 1 ? '' : 's'}.`);
+      }
       if (!response.ok) throw new Error(body.error || 'Mailbox validation is unavailable.');
       authGate.hidden = true;
       workspace.hidden = false;

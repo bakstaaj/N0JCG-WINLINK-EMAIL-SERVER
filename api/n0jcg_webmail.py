@@ -684,6 +684,10 @@ class Handler(BaseHTTPRequestHandler):
                     record_login_failure(client_id)
                     self.send_json(HTTPStatus.UNAUTHORIZED, {"error": evidence, "source": "pat"})
                     return
+                # A valid Winlink login proves the operator has recovered from
+                # prior transient RF/authentication failures. Do not carry
+                # those failures into the next login window.
+                clear_login_failures(client_id)
                 token = create_session(email, callsign, password)
                 self.send_json(HTTPStatus.OK, {**session_view({"email": email, "callsign": callsign, "last_seen": time.time()}), "evidence": evidence, "staged_for_send": staged, "sync": sync_status(callsign)}, session_cookie(token))
                 return

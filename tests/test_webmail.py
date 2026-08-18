@@ -27,6 +27,13 @@ class WebmailHelpersTests(unittest.TestCase):
     def test_session_expiry_is_disabled_by_default(self):
         self.assertEqual(MODULE.SESSION_IDLE, 0)
 
+    def test_successful_login_path_clears_rate_limit_counter(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        success_path = source.index("authenticated, evidence = wait_for_pat_auth")
+        clear_path = source.index("clear_login_failures(client_id)", success_path)
+        token_path = source.index("token = create_session", success_path)
+        self.assertLess(clear_path, token_path)
+
     def test_webmail_clears_authentication_on_protected_api_unauthorized(self):
         script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
         self.assertIn("async function requireLogin", script)
