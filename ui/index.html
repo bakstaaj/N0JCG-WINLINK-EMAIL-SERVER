@@ -19,15 +19,16 @@
   <main class="shell">
     <section class="intro" aria-labelledby="page-title">
       <div><p class="eyebrow">N0JCG Open Radio Platform</p><h1 id="page-title">Winlink Email Server status</h1><p class="lede">Configure, monitor, and diagnose the client appliance before connecting the radio.</p></div>
-      <div class="status-badge status-unknown" role="status"><span aria-hidden="true">●</span> RF state: Unknown</div>
+      <div id="rf-state" class="status-badge status-unknown" role="status"><span aria-hidden="true">●</span> RF state: Checking…</div>
     </section>
     <section class="grid" aria-label="Client appliance status">
-      <article class="card"><div class="card-heading"><h2>Appliance</h2><span class="status status-ready">Ready</span></div><dl class="facts"><div><dt>Product</dt><dd>N0JCG Winlink Email Server</dd></div><div><dt>Transmit policy</dt><dd>Disabled by default</dd></div></dl></article>
-      <article class="card"><div class="card-heading"><h2>DigiRig Mobile</h2><span class="status status-detected">Detected</span></div><dl class="facts"><div><dt>Audio</dt><dd class="mono">USB Audio Device / card 3</dd></div><div><dt>Serial</dt><dd class="mono">/dev/digirig-serial</dd></div><div><dt>PTT interface</dt><dd class="mono">/dev/digirig-ptt</dd></div></dl><p class="muted">USB detection is not proof of PTT or RF operation.</p></article>
-      <article class="card"><div class="card-heading"><h2>Software registration</h2><span class="status status-unavailable">Unregistered</span></div><dl class="facts"><div><dt>Product</dt><dd>N0JCG Winlink Email Server</dd></div><div><dt>Device identity</dt><dd class="mono">Available from registration tools</dd></div><div><dt>Activation</dt><dd>Registration request not created</dd></div></dl><p class="muted">Registration does not enable radio transmission.</p></article>
-      <article class="card"><div class="card-heading"><h2>Winlink client</h2><span class="status status-unavailable">Unavailable</span></div><dl class="facts"><div><dt>Winlink client</dt><dd>Installed; service inactive</dd></div><div><dt>Dire Wolf</dt><dd>Installed; service inactive</dd></div><div><dt>Packet RMS gateway</dt><dd>Not configured</dd></div></dl></article>
+      <article class="card"><div class="card-heading"><h2>Appliance</h2><span id="appliance-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Product</dt><dd>N0JCG Winlink Email Server</dd></div><div><dt>Transmit control</dt><dd id="transmit-policy">Checking local policy…</dd></div></dl><p class="muted">Pat and Dire Wolf control RF transmission during authenticated Packet RMS synchronization. Successful Winlink send/receive confirms the RF path.</p></article>
+      <article class="card"><div class="card-heading"><h2>DigiRig Mobile</h2><span id="digirig-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Audio subsystem</dt><dd id="digirig-audio" class="mono">Checking…</dd></div><div><dt>Serial</dt><dd id="digirig-serial" class="mono">Checking…</dd></div><div><dt>PTT interface</dt><dd id="digirig-ptt" class="mono">Checking…</dd></div></dl><p class="muted">Presence is operating-system evidence, not proof of audio, PTT, or RF operation.</p></article>
+      <article class="card"><div class="card-heading"><h2>Software registration</h2><span class="status status-unavailable">Not configured</span></div><dl class="facts"><div><dt>Product</dt><dd>N0JCG Winlink Email Server</dd></div><div><dt>Device identity</dt><dd class="mono">Created by the registration tools when requested</dd></div><div><dt>Activation</dt><dd>No registration key installed</dd></div></dl><p class="muted">Registration status is independent of Winlink login and radio transmission.</p></article>
+      <article class="card"><div class="card-heading"><h2>Winlink client</h2><span id="winlink-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Pat client</dt><dd id="pat-state">Checking…</dd></div><div><dt>Webmail service</dt><dd id="webmail-state">Checking…</dd></div><div><dt>Packet modem</dt><dd id="direwolf-state">Checking…</dd></div><div><dt>Packet RMS target</dt><dd id="rms-target" class="mono">Checking…</dd></div></dl><p class="muted">Pat synchronization is started on demand after a user’s Winlink secure login.</p></article>
       <article class="card"><div class="card-heading"><h2>Standard Forms</h2><span id="forms-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Library</dt><dd id="forms-version">Not installed</dd></div><div><dt>Available forms</dt><dd id="forms-count">0</dd></div></dl><button class="button" id="forms-update" type="button">Update Standard Forms</button><p id="forms-message" class="muted" role="status">The operator password is required to update the official library.</p></article>
-      <article class="card"><div class="card-heading"><h2>Packet station</h2><span class="status status-unknown">Operator setting</span></div><form id="radio-profile-form" class="facts"><label>Local packet station ID<input id="packet-callsign" name="packet_callsign" pattern="[A-Za-z0-9-]{3,15}" required></label><label>Radio frequency (MHz)<input id="packet-frequency" name="frequency" inputmode="decimal" pattern="[0-9]{2,3}(\.[0-9]{1,6})?" required></label><label>Automatic mailbox sync (minutes)<input id="auto-sync-minutes" name="auto_sync_minutes" type="number" min="5" max="1440" step="1" required></label><button class="button" type="submit">Save radio profile</button><p id="radio-profile-message" class="muted" role="status"></p></form></article>
+      <article class="card" id="packet-station-card" tabindex="-1"><div class="card-heading"><h2>Packet station</h2><span id="packet-status" class="status status-unknown">Checking…</span></div><form id="radio-profile-form" class="facts"><label>Local packet station ID<input id="packet-callsign" name="packet_callsign" pattern="[A-Za-z0-9-]{3,15}" required></label><label>RMS gateway target<input id="rms-target-input" name="rms_target" pattern="[A-Za-z0-9-]{3,15}" required></label><label>Radio frequency (MHz)<input id="packet-frequency" name="frequency" inputmode="decimal" pattern="[0-9]{2,3}(\.[0-9]{1,6})?" required></label><label>Automatic mailbox sync (minutes)<input id="auto-sync-minutes" name="auto_sync_minutes" type="number" min="5" max="1440" step="1" required></label><button class="button" type="submit">Save radio profile</button><p id="radio-profile-message" class="muted" role="status"></p></form><p class="muted">The local ID identifies this appliance; the target and frequency identify the selected Packet RMS gateway.</p></article>
+      <article class="card gateway-card"><div class="card-heading"><h2>Nearby RMS gateways</h2><span id="gateway-status" class="status status-unknown">Checking…</span></div><p id="gateway-location" class="muted">Location unavailable. Connect a USB GPS or enter a simulated location.</p><div class="gateway-location-form"><label>Simulated latitude<input id="sim-latitude" inputmode="decimal" placeholder="e.g. 39.7392"></label><label>Simulated longitude<input id="sim-longitude" inputmode="decimal" placeholder="e.g. -104.9903"></label><button class="button" id="save-location" type="button">Use simulated location</button><button class="header-button" id="use-gps" type="button">Use GPS</button></div><div class="gateway-actions"><button class="button" id="refresh-gateways" type="button">Refresh gateway list</button><span id="gateway-cache-note" class="muted"></span></div><div id="gateway-list" class="gateway-list"><p class="muted">No cached gateway list is installed yet.</p></div><p id="gateway-message" class="muted" role="status">The list is cached on the appliance for field use.</p></article>
     </section>
     <section class="card next-step"><div><p class="eyebrow">Next safe step</p><h2>Complete pre-radio validation</h2><p>Run software, audio, and configuration checks without enabling transmission.</p></div><a class="button" href="#diagnostics">Open diagnostics</a></section>
     <section id="diagnostics" class="card"><div class="card-heading"><h2>Diagnostics</h2><div><span id="diagnostic-status" class="status status-unknown">Checking…</span> <button class="header-button diagnostic-refresh" id="diagnostic-refresh" type="button">Refresh</button></div></div><ul id="diagnostic-list" class="checklist"><li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Checking local USB and serial evidence…</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Checking Dire Wolf installation and service state…</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Checking Winlink client installation and service state…</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Unavailable until the radio is connected.</small></span></li></ul><p id="diagnostic-observed" class="muted"></p></section>
@@ -43,6 +44,12 @@
     const diagnosticList = document.getElementById('diagnostic-list');
     const diagnosticObserved = document.getElementById('diagnostic-observed');
     const present = (value) => value ? 'present' : 'not detected';
+    function setStatus(id, text, className) {
+      const element = document.getElementById(id);
+      if (!element) return;
+      element.textContent = text;
+      element.className = `status ${className}`;
+    }
     function updateFormsCard(forms) {
       const details = forms || {};
       const formsStatus = document.getElementById('forms-status');
@@ -54,14 +61,40 @@
     async function refreshDiagnostics() {
       diagnosticStatus.textContent = 'Checking…';
       try {
-        const response = await fetch('../api/v1/operator/diagnostics?ts=' + Date.now(), { cache: 'no-store' });
+        const response = await fetch('../api/v1/operator/diagnostics', { cache: 'no-store' });
         if (!response.ok) throw new Error('diagnostics unavailable');
         const data = await response.json();
       const devices = data.devices || {};
       const services = data.services || {};
       const forms = data.standard_forms || {};
+      const packet = data.packet || {};
+      const rmsGateways = data.rms_gateways || {};
+      const audioPresent = Boolean(devices.audio && devices.audio.present);
+      const serialPresent = Boolean(devices.serial && devices.serial.present);
+      const pttPresent = Boolean(devices.ptt && devices.ptt.present);
+      const radioInterfacePresent = audioPresent && serialPresent && pttPresent;
+      const direwolfInstalled = Boolean(data.binaries && data.binaries.direwolf);
+      const patInstalled = Boolean(data.binaries && data.binaries.pat);
+      const webmailActive = services.webmail === 'active';
+      setStatus('appliance-status', 'Staged / receive-first', 'status-detected');
+      document.getElementById('transmit-policy').textContent = 'Controlled by Packet RMS session';
+      setStatus('digirig-status', radioInterfacePresent ? 'Interface detected' : 'Interface incomplete', radioInterfacePresent ? 'status-detected' : 'status-unavailable');
+      document.getElementById('digirig-audio').textContent = audioPresent ? 'Audio subsystem present' : 'Not detected';
+      document.getElementById('digirig-serial').textContent = serialPresent ? (devices.serial.path || 'Serial interface present') : 'Not detected';
+      document.getElementById('digirig-ptt').textContent = pttPresent ? (devices.ptt.path || 'PTT interface present') : 'Not detected';
+      setStatus('winlink-status', patInstalled && webmailActive ? 'Ready for login' : 'Needs attention', patInstalled && webmailActive ? 'status-ready' : 'status-unavailable');
+      document.getElementById('pat-state').textContent = patInstalled ? 'Installed; started on demand' : 'Not installed';
+      document.getElementById('webmail-state').textContent = webmailActive ? 'Active' : `Service ${services.webmail || 'unknown'}`;
+      document.getElementById('direwolf-state').textContent = direwolfInstalled ? (services.direwolf === 'active' ? 'Active' : 'Installed; inactive until radio setup') : 'Not installed';
+      document.getElementById('rms-target').textContent = packet.rms_target ? `${packet.rms_target} @ ${packet.frequency_mhz || 'frequency not set'} MHz` : 'Not configured';
+      setStatus('packet-status', packet.local_id && packet.frequency_mhz ? 'Configured' : 'Incomplete', packet.local_id && packet.frequency_mhz ? 'status-ready' : 'status-unavailable');
+      const rfState = document.getElementById('rf-state');
+      rfState.textContent = radioInterfacePresent ? `● RF state: ${services.direwolf === 'active' ? 'Packet modem active; RF unverified' : 'Radio interface detected; RF unverified'}` : '● RF state: Radio interface not detected';
+      rfState.className = `status-badge ${radioInterfacePresent ? 'status-detected' : 'status-unavailable'}`;
       updateFormsCard(forms);
-      diagnosticList.innerHTML = `<li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Audio: ${present(devices.audio && devices.audio.present)}; serial: ${present(devices.serial && devices.serial.present)}; PTT: ${present(devices.ptt && devices.ptt.present)}.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf binary: ${data.binaries && data.binaries.direwolf ? 'installed' : 'not installed'}; service: ${services.direwolf || 'unknown'}.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Winlink client binary: ${data.binaries && data.binaries.pat ? 'installed' : 'not installed'}; Webmail: ${services.webmail || 'unknown'}.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Not verified; radio is not connected and transmit policy remains ${data.transmit_policy || 'DISABLED'}.</small></span></li>`;
+      updateGatewaySummary(rmsGateways);
+      const sessionEvidence = radioInterfacePresent ? `Interface present; target ${packet.rms_target || 'not configured'}; Packet RMS transmit/receive is managed per synchronization.` : 'Unavailable until the radio interface is detected.';
+      diagnosticList.innerHTML = `<li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Audio: ${present(devices.audio && devices.audio.present)}; serial: ${present(devices.serial && devices.serial.present)}; PTT: ${present(devices.ptt && devices.ptt.present)}.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf binary: ${direwolfInstalled ? 'installed' : 'not installed'}; service: ${services.direwolf || 'unknown'}.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Pat binary: ${patInstalled ? 'installed' : 'not installed'}; Webmail service: ${services.webmail || 'unknown'}; login transport is on demand.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>${sessionEvidence}</small></span></li>`;
       diagnosticStatus.textContent = 'Live evidence';
       diagnosticStatus.className = 'status status-detected';
       diagnosticObserved.textContent = `Observed ${data.observed_at || 'unknown'} from ${data.source || 'local probe'}.`;
@@ -90,10 +123,57 @@
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Radio profile unavailable.');
         document.getElementById('packet-callsign').value = data.profile.N0JCG_PACKET_CALLSIGN || '';
+        document.getElementById('rms-target-input').value = data.profile.N0JCG_RMS_TARGET || '';
         document.getElementById('packet-frequency').value = data.profile.N0JCG_PACKET_FREQUENCY || '';
         document.getElementById('auto-sync-minutes').value = data.profile.N0JCG_AUTO_SYNC_MINUTES || '30';
       } catch (error) { document.getElementById('radio-profile-message').textContent = error.message; }
     }
+
+    function formatGatewayDate(value) {
+      if (!value) return 'unknown';
+      return new Date(Number(value) * 1000).toLocaleString();
+    }
+    function updateGatewaySummary(summary) {
+      const location = summary.location || {};
+      document.getElementById('gateway-status').textContent = summary.installed ? `${summary.count || 0} cached channels` : 'Not cached';
+      document.getElementById('gateway-status').className = `status ${summary.installed ? 'status-ready' : 'status-unavailable'}`;
+      if (location.latitude != null && location.longitude != null) {
+        document.getElementById('gateway-location').textContent = `${location.source === 'simulated' ? 'Simulated location' : 'GPS fix'}: ${Number(location.latitude).toFixed(5)}, ${Number(location.longitude).toFixed(5)}`;
+        document.getElementById('sim-latitude').value = location.latitude;
+        document.getElementById('sim-longitude').value = location.longitude;
+      } else document.getElementById('gateway-location').textContent = location.message || 'Location unavailable. Connect a USB GPS or enter a simulated location.';
+      document.getElementById('gateway-cache-note').textContent = summary.updated_at ? `Cached ${formatGatewayDate(summary.updated_at)}` : '';
+    }
+    async function loadGateways() {
+      try {
+        const response = await fetch('../api/v1/operator/rms-gateways', { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Gateway list unavailable.');
+        updateGatewaySummary({ installed: Boolean(data.count), count: data.count, updated_at: data.updated_at, location: data.location });
+        const list = document.getElementById('gateway-list');
+        if (!data.gateways.length) { list.innerHTML = '<p class="muted">No nearby Packet gateways match the current location. Refresh the cache while online or adjust the simulated coordinates.</p>'; return; }
+        list.innerHTML = data.gateways.map((gateway) => `<div class="gateway-row" tabindex="0" title="Double-click to populate the Packet station profile"><div><strong>${gateway.callsign}</strong><small>${Number(gateway.frequency_mhz).toFixed(3)} MHz · ${gateway.mode}${gateway.baud ? ` · ${gateway.baud} baud` : ''}</small></div><div class="gateway-distance">${gateway.distance_miles} mi · ${gateway.bearing_degrees}°</div><button class="header-button choose-gateway" data-callsign="${gateway.callsign}" data-frequency="${gateway.frequency_mhz.toFixed(3)}" type="button">Use</button></div>`).join('');
+        const selectGateway = (callsign, frequency) => { document.getElementById('rms-target-input').value = callsign; document.getElementById('packet-frequency').value = frequency; document.getElementById('radio-profile-message').textContent = `Selected ${callsign} at ${frequency} MHz. Save radio profile to apply it.`; const panel = document.getElementById('packet-station-card'); panel.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.getElementById('rms-target-input').focus(); };
+        list.querySelectorAll('.gateway-row').forEach((row) => row.addEventListener('dblclick', () => selectGateway(row.querySelector('.choose-gateway').dataset.callsign, row.querySelector('.choose-gateway').dataset.frequency)));
+        list.querySelectorAll('.choose-gateway').forEach((button) => button.addEventListener('click', () => selectGateway(button.dataset.callsign, button.dataset.frequency)));
+      } catch (error) { document.getElementById('gateway-message').textContent = error.message; }
+    }
+    document.getElementById('save-location').addEventListener('click', async () => {
+      const message = document.getElementById('gateway-message');
+      try {
+        const response = await fetch('../api/v1/operator/location', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ latitude: document.getElementById('sim-latitude').value, longitude: document.getElementById('sim-longitude').value, enabled: true }) });
+        const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Location could not be saved.');
+        message.textContent = 'Simulated location saved.'; updateGatewaySummary({location: data.location}); await loadGateways();
+      } catch (error) { message.textContent = error.message; }
+    });
+    document.getElementById('use-gps').addEventListener('click', async () => {
+      const message = document.getElementById('gateway-message');
+      try { const response = await fetch('../api/v1/operator/location', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ enabled: false }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'GPS mode could not be selected.'); message.textContent = 'GPS mode selected; a fix will be used when the receiver is connected.'; updateGatewaySummary({location: data.location}); await loadGateways(); } catch (error) { message.textContent = error.message; }
+    });
+    document.getElementById('refresh-gateways').addEventListener('click', async (event) => {
+      const button = event.currentTarget; const message = document.getElementById('gateway-message'); button.disabled = true; message.textContent = 'Downloading the official Winlink Packet gateway list…';
+      try { const response = await fetch('../api/v1/operator/rms-gateways/refresh', { method: 'POST' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Gateway list update failed.'); message.textContent = `Cached ${data.count} Packet gateway channels for field use.`; await loadGateways(); } catch (error) { message.textContent = error.message; } finally { button.disabled = false; }
+    });
     radioForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       const message = document.getElementById('radio-profile-message');
@@ -108,6 +188,7 @@
       } catch (error) { message.textContent = error.message; }
     });
     loadRadioProfile();
+    loadGateways();
     refreshDiagnostics();
     window.setInterval(refreshDiagnostics, 30000);
   </script>

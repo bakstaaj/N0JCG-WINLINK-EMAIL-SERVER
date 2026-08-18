@@ -10,17 +10,20 @@ CALLSIGN="${N0JCG_PACKET_CALLSIGN:-N0JCG-3}"
 AUDIO_DEVICE="${N0JCG_AUDIO_DEVICE:-plughw:Device,0}"
 PTT_DEVICE="${N0JCG_PTT_DEVICE:-/dev/digirig-serial}"
 FREQUENCY="${N0JCG_PACKET_FREQUENCY:-145.070}"
+RMS_TARGET="${N0JCG_RMS_TARGET:-N0JCG-10}"
 
 if [[ "${1:-}" != "--noninteractive" ]]; then
     read -r -p "Packet callsign [$CALLSIGN]: " value; CALLSIGN="${value:-$CALLSIGN}"
     read -r -p "DigiRig audio device [$AUDIO_DEVICE]: " value; AUDIO_DEVICE="${value:-$AUDIO_DEVICE}"
     read -r -p "DigiRig serial/PTT device [$PTT_DEVICE]: " value; PTT_DEVICE="${value:-$PTT_DEVICE}"
     read -r -p "Radio frequency in MHz [$FREQUENCY]: " value; FREQUENCY="${value:-$FREQUENCY}"
+    read -r -p "Packet RMS gateway target [$RMS_TARGET]: " value; RMS_TARGET="${value:-$RMS_TARGET}"
 fi
 
 [[ "$CALLSIGN" =~ ^[A-Z0-9-]{3,15}$ ]] || { echo "FAIL: invalid packet callsign" >&2; exit 1; }
 [[ -e "$PTT_DEVICE" ]] || { echo "FAIL: PTT device not found: $PTT_DEVICE" >&2; exit 1; }
 [[ "$AUDIO_DEVICE" =~ ^(plughw|hw):([A-Za-z0-9_=]+),[0-9]+$ ]] || { echo "FAIL: audio device must identify an ALSA card, for example plughw:Device,0" >&2; exit 1; }
+[[ "$RMS_TARGET" =~ ^[A-Z0-9-]{3,15}$ ]] || { echo "FAIL: invalid RMS gateway target" >&2; exit 1; }
 
 install -d -m 0755 "$CONFIG_DIR"
 install -d -m 0750 -o "${N0JCG_APP_USER:-pi}" -g "${N0JCG_APP_USER:-pi}" "$(dirname "$PROFILE_FILE")"
@@ -37,10 +40,11 @@ EOF
 cat > "$PROFILE_FILE" <<EOF
 N0JCG_PACKET_CALLSIGN=$CALLSIGN
 N0JCG_PACKET_FREQUENCY=$FREQUENCY
+N0JCG_RMS_TARGET=$RMS_TARGET
 N0JCG_AUDIO_DEVICE=$AUDIO_DEVICE
 N0JCG_PTT_DEVICE=$PTT_DEVICE
 N0JCG_PACKET_MODE=1200-AFSK
-N0JCG_PAT_CONNECT_URL=ax25+agwpe:///N0JCG-10
+N0JCG_PAT_CONNECT_URL=ax25+agwpe:///$RMS_TARGET
 EOF
 chmod 0644 "$CONFIG_FILE" "$PROFILE_FILE"
 chown "${N0JCG_APP_USER:-pi}:${N0JCG_APP_USER:-pi}" "$PROFILE_FILE"

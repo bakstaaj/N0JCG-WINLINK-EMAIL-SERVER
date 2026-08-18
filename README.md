@@ -1,6 +1,6 @@
 # N0JCG Winlink Email Server
 
-Current release: v0.1.1
+Current release: v0.1.2
 
 N0JCG Winlink Email Server is a Raspberry Pi client-side appliance for sending and receiving Winlink email through a Packet RMS gateway. It uses a DigiRig Mobile, a connected radio, Dire Wolf, and Pat.
 
@@ -8,13 +8,14 @@ The repository and host use compatibility identifiers such as `N0JCG-WINLINK-EMA
 
 ## Current milestone
 
-The target host is `PI-WINLINK`. The radio is not yet connected, so this project currently validates the non-RF foundation:
+The target host is `PI-WINLINK`. The client-side Packet RMS workflow is commissioned when a compatible radio, DigiRig, and gateway are available; the appliance remains distinct from an RMS gateway:
 
 - Pat (`pat-winlink`) installed for the ARM64 Debian host.
 - Dire Wolf 1.7 installed as the software AX.25 modem/TNC.
 - AX.25 tools, Hamlib, SQLite, and Nginx installed.
 - DigiRig USB audio, CP210x serial, and HID interfaces detected.
-- Radio services remain inactive and transmit behavior remains disabled.
+- Packet RMS target and frequency are operator-configurable, with cached nearby-gateway lookup available for field operation.
+- Transmission remains governed by explicit operator commissioning and verification; USB detection alone never enables RF operation.
 
 ## Components
 

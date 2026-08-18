@@ -12,9 +12,21 @@ SPEC.loader.exec_module(MODULE)
 TEMPLATE_SPEC = importlib.util.spec_from_file_location("winlink_templates", ROOT / "api" / "winlink_templates.py")
 TEMPLATE_MODULE = importlib.util.module_from_spec(TEMPLATE_SPEC)
 TEMPLATE_SPEC.loader.exec_module(TEMPLATE_MODULE)
+RMS_SPEC = importlib.util.spec_from_file_location("rms_gateways", ROOT / "api" / "rms_gateways.py")
+RMS_MODULE = importlib.util.module_from_spec(RMS_SPEC)
+RMS_SPEC.loader.exec_module(RMS_MODULE)
 
 
 class WebmailHelpersTests(unittest.TestCase):
+    def test_webmail_session_cookie_is_not_persistent(self):
+        cookie = MODULE.session_cookie("test-token")
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Strict", cookie)
+        self.assertNotIn("Max-Age", cookie)
+
+    def test_session_expiry_is_disabled_by_default(self):
+        self.assertEqual(MODULE.SESSION_IDLE, 0)
+
     def test_normalize_account_returns_callsign(self):
         email, callsign = MODULE.normalize_account("n0jcg@winlink.org")
         self.assertEqual(email, "N0JCG@WINLINK.ORG")
@@ -63,6 +75,18 @@ class WebmailHelpersTests(unittest.TestCase):
             self.assertEqual(rendered["recipient"], "N0JCG@winlink.org")
             self.assertIn("Hello Operator", rendered["body"])
             self.assertIn("From N0JCG", rendered["body"])
+
+    def test_rms_gateway_records_are_sorted_by_distance(self):
+        payload = {"Gateways": [{"Callsign": "NEAR-10", "Latitude": 39.75, "Longitude": -105.0, "Channels": [{"Frequency": 145070000, "Mode": "Packet", "Baud": 1200}]}, {"Callsign": "FAR-10", "Latitude": 40.75, "Longitude": -105.0, "Channels": [{"Frequency": 145090000, "Mode": "Packet", "Baud": 1200}]}]}
+        records = RMS_MODULE.normalize_gateways(payload)
+        nearest = RMS_MODULE.enrich_nearest(records, 39.74, -105.0)
+        self.assertEqual(nearest[0]["callsign"], "NEAR-10")
+        self.assertEqual(nearest[0]["frequency_mhz"], 145.07)
+
+    def test_rms_gateway_frequency_normalizes_hz_and_mhz(self):
+        payload = {"gateways": [{"callsign": "TEST-10", "lat": 1, "lon": 2, "channels": [{"frequency": 145.07, "mode": "1200-AFSK"}]}]}
+        record = RMS_MODULE.normalize_gateways(payload)[0]
+        self.assertEqual(record["frequency_mhz"], 145.07)
 
 
 if __name__ == "__main__":

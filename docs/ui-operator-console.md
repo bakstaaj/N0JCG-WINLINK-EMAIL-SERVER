@@ -30,3 +30,19 @@ The shell uses semantic headings, a status role, visible link labels, keyboard-v
 `GET /api/v1/operator/diagnostics` reports local, read-only evidence for the
 webmail service, Pat and Dire Wolf binaries/services, DigiRig device paths, and
 the transmit policy. It never enables a radio service or claims RF success.
+
+## Nearby RMS gateways
+
+The operator console includes a cached Packet RMS gateway finder. When the Pi
+has Internet access, **Refresh gateway list** downloads the official Winlink
+Packet status data and stores it under the appliance state directory. The
+console then sorts compatible channels by distance and shows callsign,
+frequency, mode, baud, and bearing. The cached list remains available when the
+appliance is offline.
+
+Location is selected from a standard USB GPS through `gpsd` when a fix is
+available. Until the GPS is installed, the operator can enter latitude and
+longitude as a clearly labeled simulated location. Selecting **Use** on a
+gateway fills the RMS target and frequency; **Save radio profile** applies the
+selection. The gateway target is an operator setting and is not hardcoded to a
+single RMS station.

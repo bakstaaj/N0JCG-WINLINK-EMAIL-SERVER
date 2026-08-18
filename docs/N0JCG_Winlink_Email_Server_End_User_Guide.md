@@ -3,7 +3,7 @@
 ## End User Guide
 
 **N0JCG Open Radio Platform**
-**Document version:** 1.1
+**Document version:** 1.2
 **Appliance host:** `PI-WINLINK`
 
 ### What this appliance does
@@ -122,11 +122,25 @@ Sign in to `/ui/` using the operator username and password created by the instal
 - Radio profile and Packet settings
 - Diagnostics and logs
 
+The **Nearby RMS gateways** panel uses the official Winlink gateway status data. When
+the Pi has Internet access, select **Refresh gateway list** to update the local
+cache. In the field, the cached list remains available without Internet access.
+The panel shows the five closest Packet RMS channels in a scrollable list. Enter
+simulated latitude/longitude while testing, or select **Use GPS** after a USB GPS
+receiver and `gpsd` are available.
+
+Double-click a gateway row to copy its RMS target and frequency into the Packet
+station profile, scroll to that profile, and focus the target field. Review the
+values before selecting **Save radio profile**. The selected target is applied to
+the next Winlink client exchange; it is not a gateway-side configuration change.
+
 The operator console is protected because it can change appliance configuration and radio safety settings.
 
 ### Webmail account
 
 Open `/webmail/` and select **Sign in with Winlink**. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign. Webmail remains closed until Winlink CMS secure login is accepted; failed or timed-out authentication never opens a session or mailbox.
+
+After secure login succeeds, the session remains active for the browser session. Refreshing the page does not sign the user out. Close the browser or select **Log out** to end the session. Use **Log out** on shared devices.
 
 The mailbox is isolated by callsign. A user cannot select another user’s mailbox from a URL or browser control.
 
@@ -144,6 +158,10 @@ Select **Compose** for a blank message. Use **Choose template** at the top of th
 
 Selecting **Queue message** stages the message into Pat’s official outbox and immediately starts a Packet RMS synchronization. The Send queue shows queued, staged, and transmission state. After a successful send, the message is removed from Send queue and its counter updates automatically. The operator configures automatic mailbox synchronization in `/ui/` under **Packet station → Automatic mailbox sync (minutes)**. The allowed range is 5 to 1440 minutes; the default is 30 minutes.
 
+After Pat reports the final outgoing-transfer command, WES clears the transmitted
+queue item promptly while the remainder of the mailbox synchronization continues.
+This prevents a successful send from appearing stuck while the session closes.
+
 Attachments are limited to 100 KB. The interface warns when an attachment is larger than 10 KB because packet-radio transfer may be slow.
 
 ### Signature
@@ -152,7 +170,7 @@ Select **Signature** to save a per-user signature. The signature is stored with 
 
 ### Logout
 
-Use **Log out** in the top navigation when leaving the appliance. Log out from both the operator console and webmail when using a shared workstation.
+Use **Log out** in the top navigation when leaving the appliance. Log out from both the operator console and webmail when using a shared workstation. Webmail uses a browser-session cookie by default; it is not a persistent “remember me” login.
 
 ### Bulk message actions
 
@@ -213,6 +231,7 @@ Use the operator console for configuration and diagnostics. Use webmail for mail
 | Maximum attachment | 100 KB |
 | Attachment warning | Above 10 KB |
 | Automatic mailbox sync | Operator setting, 5–1440 minutes; default 30 |
+| RMS gateway finder | Cached official list; closest five shown; GPS or simulated location |
 | Login security | Webmail opens only after Winlink secure-login acceptance |
 
 *N0JCG Winlink Email Server | N0JCG Open Radio Platform | Client-side appliance, not an RMS gateway*

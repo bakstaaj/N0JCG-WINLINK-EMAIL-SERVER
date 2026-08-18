@@ -119,7 +119,7 @@ def add_header_footer(doc):
         set_run(r, size=8, color=SLATE, bold=True)
         first_footer = section.first_page_footer.paragraphs[0]
         first_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.1    Page 1"), size=8, color=SLATE)
+        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.2    Page 1"), size=8, color=SLATE)
         add_bottom_rule(first_footer)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -233,7 +233,7 @@ def build():
     p.paragraph_format.space_after = Pt(26)
     set_run(p.add_run("A complete guide to the Raspberry Pi client appliance, Winlink mailbox access, DigiRig Mobile integration, and safe Packet RMS operation."), size=11, color=NAVY)
     add_table(doc, ["Release", "Publication"], [
-        ("0.1.1", "August 2026"),
+        ("0.1.2", "August 2026"),
         ("PRODUCT ROLE\nClient-side Winlink email", "AUDIENCE\nOperators and mailbox users"),
     ], [3.42, 3.42])
     doc.add_page_break()
@@ -304,8 +304,11 @@ def build():
     doc.add_heading("3. First-time setup", level=1)
     doc.add_heading("Operator console", level=2)
     doc.add_paragraph("Sign in to the operator console with the credentials created by the installer. Review the host identity, service state, DigiRig/USB detection, Winlink Client readiness, radio profile, Packet settings, and diagnostics before connecting RF equipment.")
+    doc.add_heading("Find a nearby Packet RMS gateway", level=2)
+    doc.add_paragraph("The Nearby RMS gateways panel uses the official Winlink gateway status data. With Internet access, select Refresh gateway list to update the local cache. The cached list remains available in the field without Internet access. The panel shows the five closest Packet RMS channels in a scrollable list. Enter simulated latitude/longitude for testing, or select Use GPS after a USB GPS receiver and gpsd are available.")
+    doc.add_paragraph("Double-click a gateway row to copy its RMS target and frequency into the Packet station profile, scroll to that profile, and focus the target field. Review the values before selecting Save radio profile. The selected target applies to the next Winlink client exchange; it does not change the external gateway.")
     doc.add_heading("Webmail account", level=2)
-    doc.add_paragraph("Open the webmail address and select Sign in with Winlink. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign. Webmail remains closed until Winlink CMS secure login is accepted; failed or timed-out authentication never opens a session or mailbox.")
+    doc.add_paragraph("Open the webmail address and select Sign in with Winlink. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign. Webmail remains closed until Winlink CMS secure login is accepted; failed or timed-out authentication never opens a session or mailbox. After secure login succeeds, the session remains active for the browser session; refreshing the page does not sign the user out. Close the browser or select Log out to end the session.")
     add_callout(doc, "PRIVATE MAILBOX MODEL", "Mailbox access is isolated by callsign. A user cannot select another user’s mailbox from a URL or browser control.", PALE_CYAN)
     add_screenshot(doc, "webmail-inbox.png", "Figure 1. N0JCG webmail inbox and mailbox status on the client appliance.")
     doc.add_page_break()
@@ -319,12 +322,13 @@ def build():
         "The Drafts counter updates after saving. Open a draft to continue editing; queuing an opened draft removes it from Drafts and places it in Send queue.",
         "Attachments are limited to 100 KB. A warning appears above 10 KB because packet-radio transfer may be slow.",
         "Select Signature to save a per-user signature. It is restored after the next login for that Winlink callsign.",
-        "Use Log out when leaving a shared workstation.",
+        "Use Log out when leaving a shared workstation. Webmail uses a browser-session cookie by default; it does not remember users across browser sessions.",
     ])
     doc.add_heading("Folders", level=2)
     doc.add_paragraph("Custom folders are shown indented under Inbox. Create and delete folders from Manage folders, then drag an Inbox message onto a folder to organize it. Moving a message removes it from its original folder. Opening a message marks it read. Inbox, Sent, and custom folders provide checkboxes for bulk Mark selected read and Delete selected actions.")
     doc.add_heading("Send queue and automatic synchronization", level=2)
     doc.add_paragraph("Queue message stages the message into Pat’s official outbox and immediately starts a Packet RMS synchronization. The Send queue shows queued, staged, and transmission state. After a successful send, the message is removed from Send queue and its counter updates automatically. The operator configures automatic mailbox synchronization in the operator console under Packet station → Automatic mailbox sync (minutes), from 5 to 1440 minutes; the default is 30 minutes.")
+    doc.add_paragraph("After Pat reports the final outgoing-transfer command, WES clears the transmitted queue item promptly while the remainder of the mailbox synchronization continues. This prevents a successful send from appearing stuck while the session closes.")
     doc.add_page_break()
 
     doc.add_heading("5. Connect and verify the radio", level=1)

@@ -3,7 +3,10 @@
 
 Credentials are submitted only to this local service, passed to Pat through a
 0600 temporary config file, and removed after the CMS/Telnet validation call.
-Active sessions retain the credential in process memory only, with idle expiry.
+Active sessions retain the credential in process memory only. By default, the
+session lasts for the browser session and ends when the browser discards the
+session cookie or the user selects Log out. An optional idle expiry can be
+enabled with N0JCG_SESSION_IDLE_SECONDS.
 This service is intentionally conservative: a successful local form post is
 never treated as mailbox ownership without Pat CMS evidence.
 """
@@ -33,11 +36,13 @@ try:
     from winlink_templates import catalog as template_catalog
     from winlink_templates import render as render_template
     from winlink_templates import update_library as update_template_library
+    from rms_gateways import cache_payload, enrich_nearest, location_state, refresh_cache, set_simulated_location
 except ModuleNotFoundError:  # direct import by the repository test loader
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from winlink_templates import catalog as template_catalog
     from winlink_templates import render as render_template
     from winlink_templates import update_library as update_template_library
+    from rms_gateways import cache_payload, enrich_nearest, location_state, refresh_cache, set_simulated_location
 
 
 HOST = os.environ.get("N0JCG_WEBMAIL_HOST", "127.0.0.1")
@@ -54,7 +59,10 @@ PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTe
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
 PAT_AGWPE_ADDR = os.environ.get("N0JCG_PAT_AGWPE_ADDR", "localhost:8002")
-SESSION_IDLE = int(os.environ.get("N0JCG_SESSION_IDLE_SECONDS", "1800"))
+# A value greater than zero enables an operator-selected idle timeout. The
+# default is browser-session lifetime so ordinary page refreshes and long-lived
+# mailbox work do not unexpectedly sign the user out.
+SESSION_IDLE = int(os.environ.get("N0JCG_SESSION_IDLE_SECONDS", "0"))
 STATE_DIR = Path(os.environ.get("N0JCG_WEBMAIL_STATE_DIR", "/var/lib/n0jcg-winlink-webmail"))
 RADIO_PROFILE_PATH = STATE_DIR / "radio-profile.conf"
 PAT_BASE_CONFIG = os.environ.get("N0JCG_PAT_BASE_CONFIG", "")
@@ -174,7 +182,9 @@ def pat_validate(callsign, password):
         # Use the canonical CMS URL directly. A locally customized `telnet`
         # alias may point to an executable or stale label; that caused Pat's
         # Exit 126 here before the Winlink server was contacted.
-        connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
+        profile_target = radio_profile().get("N0JCG_RMS_TARGET", "").strip()
+        profile_url = f"ax25+agwpe:///{profile_target}" if profile_target else ""
+        connect_url = (profile_url or PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
         # The mailbox identity is dynamic per login. The AGWPE identity bridge
         # rewrites only the RF AX.25 source to the configured packet callsign.
         station_call = callsign
@@ -250,6 +260,15 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["pending_count"] = 0
                     job["auth_event"].set()
                 elif line.lstrip(">").strip() == "FQ":
+                    # FQ is Pat's final exchange command. If this session
+                    # uploaded queued messages, the RMS has accepted the
+                    # outgoing transfer; do not keep the local send queue in
+                    # STAGED while waiting for the remote socket to close.
+                    if job.get("outgoing_count"):
+                        with sqlite3.connect(DB_PATH) as db:
+                            db.execute("UPDATE mailbox_queue SET state='SENT' WHERE callsign=? AND state='STAGED'", (callsign,))
+                            db.commit()
+                        job["sent"] = job.get("outgoing_count") or 0
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "no_messages"
                     job["message"] = "The RMS returned no downloadable proposals in this exchange."
@@ -299,7 +318,13 @@ def start_pat_sync(callsign, password):
         config = Path(handle.name)
     write_pat_config(callsign, password, config)
     os.chmod(config, 0o600)
-    connect_url = (PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
+    # Read the operator profile for every new exchange. The profile can be
+    # changed from the console while this long-running webmail service stays
+    # up; using only the EnvironmentFile value would keep the previous RMS
+    # target in memory until the next service restart.
+    profile_target = radio_profile().get("N0JCG_RMS_TARGET", "").strip()
+    profile_url = f"ax25+agwpe:///{profile_target}" if profile_target else ""
+    connect_url = (profile_url or PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
     command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", connect_url]
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
@@ -459,19 +484,21 @@ def operator_diagnostics():
         path = Path(pattern)
         devices[label] = {"path": pattern, "present": path.exists()}
     templates = template_catalog()
+    profile = radio_profile()
     return {
         "source": "local_probe",
         "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "transmit_policy": "DISABLED",
+        "transmit_policy": "PACKET_SESSION_CONTROLLED",
         "services": {"webmail": service_state("n0jcg-webmail.service"), "pat": service_state("pat@pi.service"), "direwolf": service_state("direwolf.service")},
         "binaries": {"pat": bool(shutil.which("pat-winlink") or shutil.which("pat")), "direwolf": bool(shutil.which("direwolf"))},
         "devices": devices,
         "standard_forms": {"available": bool(templates.get("available")), "version": templates.get("version", ""), "count": len(templates.get("templates", []))},
+        "packet": {"local_id": profile["N0JCG_PACKET_CALLSIGN"], "frequency_mhz": profile["N0JCG_PACKET_FREQUENCY"], "mode": "1200-AFSK", "rms_target": profile["N0JCG_RMS_TARGET"], "auto_sync_minutes": int(profile["N0JCG_AUTO_SYNC_MINUTES"])},
     }
 
 
 def radio_profile():
-    values = {"N0JCG_PACKET_CALLSIGN": PAT_PACKET_CALLSIGN or "N0JCG-3", "N0JCG_PACKET_FREQUENCY": "145.070", "N0JCG_AUDIO_DEVICE": "plughw:Device,0", "N0JCG_PTT_DEVICE": "/dev/digirig-ptt", "N0JCG_AUTO_SYNC_MINUTES": "30"}
+    values = {"N0JCG_PACKET_CALLSIGN": PAT_PACKET_CALLSIGN or "N0JCG-3", "N0JCG_PACKET_FREQUENCY": "145.070", "N0JCG_AUDIO_DEVICE": "plughw:Device,0", "N0JCG_PTT_DEVICE": "/dev/digirig-ptt", "N0JCG_AUTO_SYNC_MINUTES": "30", "N0JCG_RMS_TARGET": "N0JCG-10"}
     try:
         for line in RADIO_PROFILE_PATH.read_text(encoding="utf-8").splitlines():
             if "=" in line:
@@ -488,12 +515,15 @@ def apply_radio_profile(data):
     callsign = str(data.get("packet_callsign") or current["N0JCG_PACKET_CALLSIGN"]).strip().upper()
     frequency = str(data.get("frequency") or current["N0JCG_PACKET_FREQUENCY"]).strip()
     auto_sync_minutes = str(data.get("auto_sync_minutes") or current["N0JCG_AUTO_SYNC_MINUTES"]).strip()
+    rms_target = str(data.get("rms_target") or current["N0JCG_RMS_TARGET"]).strip().upper()
     if not re.fullmatch(r"[A-Z0-9-]{3,15}", callsign):
         raise ValueError("packet station ID is invalid")
     if not re.fullmatch(r"[0-9]{2,3}(?:\.[0-9]{1,6})?", frequency):
         raise ValueError("frequency must be entered in MHz, for example 145.070")
     if not re.fullmatch(r"[0-9]+", auto_sync_minutes) or not 5 <= int(auto_sync_minutes) <= 1440:
         raise ValueError("automatic mailbox sync must be between 5 and 1440 minutes")
+    if not re.fullmatch(r"[A-Z0-9-]{3,15}", rms_target):
+        raise ValueError("RMS gateway target is invalid")
     RADIO_PROFILE_PATH.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
     profile_lines = [
         f"N0JCG_PACKET_CALLSIGN={callsign}",
@@ -501,8 +531,9 @@ def apply_radio_profile(data):
         f"N0JCG_AUDIO_DEVICE={current['N0JCG_AUDIO_DEVICE']}",
         f"N0JCG_PTT_DEVICE={current['N0JCG_PTT_DEVICE']}",
         f"N0JCG_AUTO_SYNC_MINUTES={auto_sync_minutes}",
+        f"N0JCG_RMS_TARGET={rms_target}",
         "N0JCG_PACKET_MODE=1200-AFSK",
-        "N0JCG_PAT_CONNECT_URL=ax25+agwpe:///N0JCG-10",
+        f"N0JCG_PAT_CONNECT_URL=ax25+agwpe:///{rms_target}",
         "",
     ]
     RADIO_PROFILE_PATH.write_text("\n".join(profile_lines), encoding="utf-8")
@@ -526,6 +557,15 @@ def create_session(email, callsign, password):
     return token
 
 
+def session_cookie(token):
+    """Return a browser-session cookie; it is intentionally not persistent."""
+    return f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict"
+
+
+def clear_session_cookie():
+    return "n0jcg_webmail_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+
+
 def session_from(handler):
     raw = handler.headers.get("Cookie", "")
     cookies = http.cookies.SimpleCookie()
@@ -535,7 +575,8 @@ def session_from(handler):
         return None
     with LOCK:
         session = SESSIONS.get(token.value)
-        if not session or time.time() - session["last_seen"] > SESSION_IDLE:
+        expired = SESSION_IDLE > 0 and time.time() - session["last_seen"] > SESSION_IDLE if session else True
+        if not session or expired:
             SESSIONS.pop(token.value, None)
             return None
         session["last_seen"] = time.time()
@@ -543,7 +584,8 @@ def session_from(handler):
 
 
 def session_view(session):
-    return {"authenticated": True, "email": session["email"], "callsign": session["callsign"], "source": "pat", "auth_state": sync_status(session["callsign"])["state"], "expires_at": int(session["last_seen"] + SESSION_IDLE)}
+    expires_at = int(session["last_seen"] + SESSION_IDLE) if SESSION_IDLE > 0 else None
+    return {"authenticated": True, "email": session["email"], "callsign": session["callsign"], "source": "pat", "auth_state": sync_status(session["callsign"])["state"], "expires_at": expires_at}
 
 
 def login_allowed(client_id):
@@ -643,7 +685,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(HTTPStatus.UNAUTHORIZED, {"error": evidence, "source": "pat"})
                     return
                 token = create_session(email, callsign, password)
-                self.send_json(HTTPStatus.OK, {**session_view({"email": email, "callsign": callsign, "last_seen": time.time()}), "evidence": evidence, "staged_for_send": staged, "sync": sync_status(callsign)}, f"n0jcg_webmail_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_IDLE}")
+                self.send_json(HTTPStatus.OK, {**session_view({"email": email, "callsign": callsign, "last_seen": time.time()}), "evidence": evidence, "staged_for_send": staged, "sync": sync_status(callsign)}, session_cookie(token))
                 return
             if self.path == "/api/v1/auth/register":
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "separate webmail registration is not used; sign in with Winlink"})
@@ -661,7 +703,24 @@ class Handler(BaseHTTPRequestHandler):
                 if session:
                     with LOCK:
                         SESSIONS.pop(session["token"], None)
-                self.send_json(HTTPStatus.OK, {"authenticated": False}, "n0jcg_webmail_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
+                self.send_json(HTTPStatus.OK, {"authenticated": False}, clear_session_cookie())
+                return
+            if self.path == "/api/v1/operator/rms-gateways/refresh":
+                try:
+                    payload = refresh_cache()
+                except (OSError, RuntimeError, ValueError, urllib.error.URLError) as exc:
+                    self.send_json(HTTPStatus.BAD_GATEWAY, {"error": f"RMS gateway list update failed: {exc}", "source": "winlink_rms_status"})
+                    return
+                self.send_json(HTTPStatus.OK, {"updated": True, **payload})
+                return
+            if self.path == "/api/v1/operator/location":
+                try:
+                    enabled = bool(data.get("enabled", True))
+                    value = set_simulated_location(data.get("latitude"), data.get("longitude"), enabled)
+                except ValueError as exc:
+                    self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                    return
+                self.send_json(HTTPStatus.OK, {"saved": True, "location": value})
                 return
             if self.path == "/api/v1/operator/templates/update":
                 try:
@@ -829,7 +888,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         session = session_from(self)
         if self.path == "/api/v1/operator/diagnostics":
-            self.send_json(HTTPStatus.OK, operator_diagnostics())
+            diagnostics = operator_diagnostics()
+            cache = cache_payload()
+            diagnostics["rms_gateways"] = {"installed": bool(cache.get("installed")), "count": int(cache.get("count", len(cache.get("records", [])))), "updated_at": cache.get("updated_at"), "location": location_state()}
+            self.send_json(HTTPStatus.OK, diagnostics)
+            return
+        if self.path == "/api/v1/operator/location":
+            self.send_json(HTTPStatus.OK, {"location": location_state()})
+            return
+        if self.path == "/api/v1/operator/rms-gateways":
+            cache = cache_payload()
+            location = location_state()
+            latitude, longitude = location.get("latitude"), location.get("longitude")
+            nearby = enrich_nearest(cache.get("records", []), latitude, longitude, limit=5) if latitude is not None and longitude is not None else []
+            self.send_json(HTTPStatus.OK, {"source": cache.get("source"), "updated_at": cache.get("updated_at"), "count": len(cache.get("records", [])), "location": location, "gateways": nearby})
             return
         if self.path == "/api/v1/operator/radio-profile":
             self.send_json(HTTPStatus.OK, {"profile": radio_profile()})

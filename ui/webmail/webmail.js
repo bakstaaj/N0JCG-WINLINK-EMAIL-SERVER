@@ -39,6 +39,7 @@
         window.clearTimeout(syncTimer);
         workspace.hidden = true;
         authGate.hidden = false;
+        resetMailboxState();
         authMessage(document.getElementById('login-form'), body.message || 'Winlink authentication failed.');
         return;
       }
@@ -52,13 +53,13 @@
       syncStatus.textContent = active ? (body.message || 'Synchronizing the Winlink mailbox…') : (body.message || '');
       if (active) {
         window.clearTimeout(syncTimer);
-        syncTimer = window.setTimeout(pollMailboxSync, 2500);
+        syncTimer = window.setTimeout(pollMailboxSync, 1000);
       }
       if (active && document.querySelector('[data-folder="inbox"].active')) loadMessages('inbox');
       if (!active && body.stage === 'complete' && document.querySelector('[data-folder="inbox"].active')) {
         loadMessages('inbox');
       }
-      if (!active && body.stage === 'complete') {
+      if (!active && ['complete', 'no_messages'].includes(body.stage)) {
         if (document.querySelector('[data-folder="queue"].active')) loadMessages('queue');
         refreshNavCounts();
       }
@@ -118,7 +119,7 @@
       setFolderCount('queue', queue.length);
       if (queue.some((item) => item.state === 'STAGED')) {
         window.clearTimeout(queueTimer);
-        queueTimer = window.setTimeout(pollQueueUntilSettled, 2500);
+        queueTimer = window.setTimeout(pollQueueUntilSettled, 1000);
       } else if (document.querySelector('[data-folder="queue"].active')) {
         await loadMessages('queue');
       }
@@ -197,7 +198,7 @@
         setFolderCount('queue', queue.length);
         if (queue.some((item) => item.state === 'STAGED')) {
           window.clearTimeout(queueTimer);
-          queueTimer = window.setTimeout(pollQueueUntilSettled, 2500);
+          queueTimer = window.setTimeout(pollQueueUntilSettled, 1000);
         }
         folderView.innerHTML = queue.length ? `<div class="message-list">${queue.map((item) => `<div class="message-row queue-row"><div class="queue-summary"><strong>${escapeHtml(item.subject)}</strong><span>${escapeHtml(item.recipient)}</span><time>${escapeHtml(item.state)}</time></div>${item.state === 'QUEUED' ? `<button class="queue-cancel" type="button" data-cancel-queue="${escapeHtml(item.id)}">Cancel</button>` : ''}</div>`).join('')}</div>` : '<strong>Send queue is empty</strong><p>No messages are waiting for a verified Pat/Packet transmission path.</p>';
         folderTitle.textContent = `Send queue ${queue.length}`;
@@ -413,6 +414,7 @@
           window.clearTimeout(sessionTimer);
           workspace.hidden = true;
           authGate.hidden = false;
+          resetMailboxState();
           authMessage(document.getElementById('login-form'), 'Your Webmail session has expired. Please sign in again.');
           return;
         }
@@ -477,11 +479,24 @@
     document.title = `N0JCG Winlink Email Server | Webmail - ${safeCallsign}`;
   }
 
+  function resetMailboxState() {
+    currentCallsign = '';
+    if (mailUser) mailUser.textContent = '';
+    if (mailboxBadge) {
+      mailboxBadge.className = 'status-badge status-unavailable';
+      mailboxBadge.textContent = '! Mailbox: Sign in required';
+    }
+    if (syncStatus) {
+      syncStatus.hidden = true;
+      syncStatus.textContent = '';
+    }
+  }
+
   async function logout() {
     logoutButton.disabled = true;
     try { await fetch('/api/v1/auth/logout', { method: 'POST' }); } finally {
       signature = '';
-      mailUser.textContent = '';
+      resetMailboxState();
       document.title = 'N0JCG Winlink Email Server | Webmail';
       workspace.hidden = true;
       authGate.hidden = false;
@@ -552,6 +567,10 @@
 
   function scheduleSessionCheck(expiresAt) {
     if (sessionTimer) window.clearTimeout(sessionTimer);
+    // A null expiry means the server issued a browser-session cookie. The
+    // browser controls its lifetime; only explicit logout or browser close
+    // should end the normal session.
+    if (!Number(expiresAt)) return;
     const delay = Math.max(1000, (Number(expiresAt || 0) * 1000) - Date.now() + 1000);
     sessionTimer = window.setTimeout(async () => {
       try {
@@ -560,6 +579,7 @@
         if (!response.ok || !body.authenticated) {
           workspace.hidden = true;
           authGate.hidden = false;
+          resetMailboxState();
           authMessage(document.getElementById('login-form'), 'Your Webmail session expired. Please sign in again.');
           return;
         }
