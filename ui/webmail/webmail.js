@@ -18,12 +18,44 @@
   let syncTimer;
   let queueTimer;
   let autoSyncTimer;
+  let redirectingToLogin = false;
   let currentCallsign = '';
+  const nativeFetch = window.fetch.bind(window);
   const emptyCopy = {
     inbox: ['No mailbox connection', 'The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
     sent: ['No sent messages', 'Sent message history will appear here after the Winlink mailbox is connected.'],
     drafts: ['No drafts', 'Drafts are stored locally only until the mailbox API is connected.'],
     queue: ['Send queue is empty', 'Messages queued for Packet transmission will appear here with delivery state and retry evidence.']
+  };
+
+  async function requireLogin(message = 'Your Winlink authentication is no longer valid. Please sign in again.') {
+    if (redirectingToLogin) return;
+    redirectingToLogin = true;
+    window.clearTimeout(syncTimer);
+    window.clearTimeout(queueTimer);
+    window.clearTimeout(autoSyncTimer);
+    try {
+      await nativeFetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (_) { /* continue to clear the local view even if the server is unavailable */ }
+    signature = '';
+    resetMailboxState();
+    document.title = 'N0JCG Winlink Email Server | Webmail';
+    workspace.hidden = true;
+    authGate.hidden = false;
+    document.getElementById('login-form').reset();
+    authMessage(document.getElementById('login-form'), message);
+  }
+
+  window.fetch = async (...args) => {
+    const response = await nativeFetch(...args);
+    const requestUrl = String(args[0] || '');
+    const protectedWebmailRequest = requestUrl.startsWith('/api/v1/mail/')
+      || requestUrl.startsWith('/api/v1/account/')
+      || requestUrl.startsWith('/api/v1/templates');
+    if (response.status === 401 && protectedWebmailRequest) {
+      void requireLogin();
+    }
+    return response;
   };
 
   async function pollMailboxSync() {
@@ -493,6 +525,7 @@
   }
 
   async function logout() {
+    redirectingToLogin = true;
     logoutButton.disabled = true;
     try { await fetch('/api/v1/auth/logout', { method: 'POST' }); } finally {
       signature = '';
@@ -504,6 +537,7 @@
       logoutButton.disabled = false;
       if (sessionTimer) window.clearTimeout(sessionTimer);
       window.clearTimeout(autoSyncTimer);
+      redirectingToLogin = false;
     }
   }
 
@@ -517,6 +551,7 @@
 
   async function submitAuth(event) {
     event.preventDefault();
+    redirectingToLogin = false;
     const formElement = event.currentTarget;
     const data = Object.fromEntries(new FormData(formElement));
     const button = formElement.querySelector('button[type="submit"]');

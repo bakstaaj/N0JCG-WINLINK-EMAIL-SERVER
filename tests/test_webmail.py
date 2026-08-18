@@ -27,6 +27,13 @@ class WebmailHelpersTests(unittest.TestCase):
     def test_session_expiry_is_disabled_by_default(self):
         self.assertEqual(MODULE.SESSION_IDLE, 0)
 
+    def test_webmail_clears_authentication_on_protected_api_unauthorized(self):
+        script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        self.assertIn("async function requireLogin", script)
+        self.assertIn("nativeFetch('/api/v1/auth/logout'", script)
+        self.assertIn("response.status === 401 && protectedWebmailRequest", script)
+        self.assertIn("document.getElementById('login-form').reset()", script)
+
     def test_normalize_account_returns_callsign(self):
         email, callsign = MODULE.normalize_account("n0jcg@winlink.org")
         self.assertEqual(email, "N0JCG@WINLINK.ORG")
