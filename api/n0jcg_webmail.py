@@ -55,6 +55,7 @@ PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "300"))
 # accepted. This wait covers RF connection and challenge exchange only; the
 # subsequent mailbox transfer remains asynchronous.
 PAT_LOGIN_WAIT = int(os.environ.get("N0JCG_PAT_LOGIN_WAIT_SECONDS", "90"))
+PAT_POST_AUTH_TIMEOUT = int(os.environ.get("N0JCG_PAT_POST_AUTH_TIMEOUT_SECONDS", "180"))
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
@@ -240,6 +241,7 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["stage"] = "authenticating"
                     job["state"] = "AUTHENTICATED"
                     job["message"] = "Winlink secure login accepted; requesting mailbox index."
+                    job["post_auth_deadline"] = time.time() + PAT_POST_AUTH_TIMEOUT
                     job["auth_event"].set()
                 elif re.search(r"\d+ proposal\(s\) received", line, re.I):
                     job["pending_count"] = int(re.search(r"(\d+) proposal", line, re.I).group(1))
@@ -285,7 +287,13 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     db.commit()
                 job["stage"] = "complete"
                 job["message"] = "Mailbox synchronization complete."
-            if job["state"] not in ("AUTHENTICATED", "ERROR"):
+            if returncode != 0 and job["state"] == "AUTHENTICATED":
+                job["state"] = "ERROR"
+                job["stage"] = "failed"
+                detail = job.get("last_line") or "Pat stopped after secure login before the mailbox index was received."
+                job["message"] = f"Winlink mailbox synchronization failed after secure login. {detail}"
+                job["error_event"].set()
+            elif job["state"] not in ("AUTHENTICATED", "ERROR"):
                 if returncode == 0:
                     job["state"] = "ERROR"
                     job["stage"] = "failed"
@@ -305,6 +313,27 @@ def _pat_sync_worker(callsign, password, config, process, job):
             job["error_event"].set()
     finally:
         config.unlink(missing_ok=True)
+
+
+def _pat_sync_watchdog(job):
+    """Stop a post-auth exchange that has stopped producing mailbox progress."""
+    while True:
+        process = job.get("process")
+        if not process or process.poll() is not None:
+            return
+        with LOCK:
+            deadline = job.get("post_auth_deadline")
+            state = job.get("state")
+            stage = job.get("stage")
+        if deadline and time.time() >= deadline and state == "AUTHENTICATED" and stage == "authenticating":
+            with LOCK:
+                job["state"] = "ERROR"
+                job["stage"] = "failed"
+                job["message"] = "Winlink mailbox index timed out after secure login. The RMS did not complete the mailbox request."
+                job["error_event"].set()
+            process.terminate()
+            return
+        time.sleep(1)
 
 
 def start_pat_sync(callsign, password):
@@ -340,6 +369,7 @@ def start_pat_sync(callsign, password):
     with LOCK:
         SYNC_JOBS[callsign] = job
     threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()
+    threading.Thread(target=_pat_sync_watchdog, args=(job,), daemon=True, name=f"pat-watchdog-{callsign}").start()
     return job
 
 

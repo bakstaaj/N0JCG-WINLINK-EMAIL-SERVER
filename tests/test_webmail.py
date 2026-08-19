@@ -39,6 +39,12 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('"rms_target", "last_line"', source)
         self.assertIn("The client stopped before reporting a connection attempt.", source)
 
+    def test_post_auth_pat_exit_is_not_left_in_authenticated_state(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('if returncode != 0 and job["state"] == "AUTHENTICATED":', source)
+        self.assertIn("PAT_POST_AUTH_TIMEOUT", source)
+        self.assertIn("pat-watchdog", source)
+
     def test_webmail_clears_authentication_on_protected_api_unauthorized(self):
         script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
         self.assertIn("async function requireLogin", script)
