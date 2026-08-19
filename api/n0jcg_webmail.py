@@ -220,7 +220,7 @@ def sync_status(callsign):
         job = SYNC_JOBS.get(callsign)
         if not job:
             return {"state": "IDLE", "stage": "idle", "message": "No mailbox synchronization is running."}
-        return {key: job.get(key) for key in ("state", "stage", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count")}
+        return {key: job.get(key) for key in ("state", "stage", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count", "rms_target", "last_line")}
 
 
 def _pat_sync_worker(callsign, password, config, process, job):
@@ -294,7 +294,8 @@ def _pat_sync_worker(callsign, password, config, process, job):
                 else:
                     job["state"] = "ERROR"
                     job["stage"] = "failed"
-                    job["message"] = "Winlink mailbox synchronization failed."
+                    detail = job.get("last_line") or "The client stopped before reporting a connection attempt."
+                    job["message"] = f"Winlink mailbox synchronization failed. {detail}"
                     job["error_event"].set()
     except Exception as exc:
         with LOCK:
@@ -335,7 +336,7 @@ def start_pat_sync(callsign, password):
             raise RuntimeError("Pat client is not installed on the appliance.")
         command[0] = alternate
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
-    job = {"process": process, "state": "CONNECTING", "stage": "connecting", "message": "Connecting to the Packet RMS gateway.", "started_at": time.time(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
+    job = {"process": process, "state": "CONNECTING", "stage": "connecting", "message": f"Connecting to Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
     with LOCK:
         SYNC_JOBS[callsign] = job
     threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()

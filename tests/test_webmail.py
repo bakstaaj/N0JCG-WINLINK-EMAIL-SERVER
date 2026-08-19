@@ -34,6 +34,11 @@ class WebmailHelpersTests(unittest.TestCase):
         token_path = source.index("token = create_session", success_path)
         self.assertLess(clear_path, token_path)
 
+    def test_sync_status_exposes_safe_transport_diagnostics(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('"rms_target", "last_line"', source)
+        self.assertIn("The client stopped before reporting a connection attempt.", source)
+
     def test_webmail_clears_authentication_on_protected_api_unauthorized(self):
         script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
         self.assertIn("async function requireLogin", script)
