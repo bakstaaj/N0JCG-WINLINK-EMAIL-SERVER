@@ -12,7 +12,10 @@ SupplementaryGroups=audio input dialout
 ExecStartPre=/usr/bin/amixer -c Device cset numid=8 2
 ExecStartPre=/usr/bin/amixer -c Device cset numid=9 0
 ExecStart=/usr/bin/direwolf -c /etc/n0jcg-winlink/direwolf.conf -t 0
-Restart=on-failure
+# Dire Wolf can exit cleanly after a USB/audio-device SIGHUP. The packet
+# bridge still remains up in that case, so always restart the modem unless an
+# operator explicitly stops the unit.
+Restart=always
 RestartSec=3
 NoNewPrivileges=true
 
