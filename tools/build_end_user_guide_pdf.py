@@ -9,7 +9,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak,
-    Table, TableStyle, KeepTogether,
+    Table, TableStyle, KeepTogether, Image,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +35,7 @@ def footer(canvas, doc):
     canvas.line(0.78 * inch, 0.55 * inch, 7.72 * inch, 0.55 * inch)
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(SLATE)
-    canvas.drawString(0.78 * inch, 0.36 * inch, "N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.2")
+    canvas.drawString(0.78 * inch, 0.36 * inch, "N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.3")
     canvas.drawRightString(7.72 * inch, 0.36 * inch, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -54,7 +54,23 @@ def build():
     doc.addPageTemplates([PageTemplate(id="n0jcg", frames=frame, onPage=footer)])
     story = []
     story.append(Table([["N0JCG OPEN RADIO PLATFORM"]], colWidths=[doc.width], style=TableStyle([("BACKGROUND", (0,0), (-1,-1), NAVY), ("TEXTCOLOR", (0,0), (-1,-1), colors.white), ("FONTNAME", (0,0), (-1,-1), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 16), ("ALIGN", (0,0), (-1,-1), "CENTER"), ("TOPPADDING", (0,0), (-1,-1), 18), ("BOTTOMPADDING", (0,0), (-1,-1), 18)])))
-    story += [Spacer(1, 0.35*inch), Paragraph("OPERATOR HANDBOOK", ParagraphStyle("CoverLabel", parent=styles["CoverSub"], fontName="Helvetica-Bold", fontSize=10, textColor=CYAN)), Paragraph("N0JCG Winlink Email Server", styles["CoverTitle"]), Paragraph("Installation, client setup, webmail operation, and troubleshooting", styles["CoverSub"]), Paragraph("Release 0.1.2  |  August 2026", ParagraphStyle("CoverMeta", parent=styles["BodyN0"], alignment=TA_CENTER, textColor=SLATE)), PageBreak()]
+    story += [Spacer(1, 0.35*inch), Paragraph("OPERATOR HANDBOOK", ParagraphStyle("CoverLabel", parent=styles["CoverSub"], fontName="Helvetica-Bold", fontSize=10, textColor=CYAN)), Paragraph("N0JCG Winlink Email Server", styles["CoverTitle"]), Paragraph("Installation, client setup, webmail operation, and troubleshooting", styles["CoverSub"]), Paragraph("Release 0.1.3  |  August 2026", ParagraphStyle("CoverMeta", parent=styles["BodyN0"], alignment=TA_CENTER, textColor=SLATE)), PageBreak()]
+    story.append(Paragraph("Interface reference", styles["H1N0"]))
+    story.append(Paragraph("Current N0JCG-branded operator and webmail views used throughout this guide.", styles["BodyN0"]))
+    screenshot_specs = [
+        (ROOT / "docs" / "assets" / "operator-status.png", "Operator status and transmit safety state."),
+        (ROOT / "docs" / "assets" / "operator-diagnostics.png", "Operator diagnostics and safe next step."),
+        (ROOT / "docs" / "assets" / "webmail-inbox.png", "Webmail inbox and mailbox status."),
+        (ROOT / "docs" / "assets" / "mailbox-progress.png", "Mailbox synchronization progress."),
+        (ROOT / "docs" / "assets" / "compose-message.png", "Compose and message controls."),
+    ]
+    for image_path, caption in screenshot_specs:
+        if image_path.exists():
+            image = Image(str(image_path))
+            image._restrictSize(doc.width, 4.85 * inch)
+            story.append(image)
+            story.append(Paragraph(caption, ParagraphStyle("ScreenshotCaption", parent=styles["BodyN0"], fontSize=8.5, leading=11, textColor=SLATE, alignment=TA_CENTER, spaceAfter=10)))
+    story.append(PageBreak())
     lines = SOURCE.read_text(encoding="utf-8").splitlines()
     in_code = False
     table_rows = []

@@ -12,11 +12,13 @@ import argparse
 import asyncio
 import os
 import struct
+import sys
 from dataclasses import dataclass
 
 
 HEADER = struct.Struct("<B3s c B c B 10s 10s I I")
 CALL_SIZE = 10
+DEBUG = os.environ.get("N0JCG_AGW_DEBUG", "0") == "1"
 
 
 def call_bytes(value: str) -> bytes:
@@ -28,6 +30,28 @@ def call_bytes(value: str) -> bytes:
 
 def clean_call(value: bytes) -> str:
     return value.split(b"\0", 1)[0].decode("ascii", "ignore").strip().upper()
+
+
+def same_call(left: bytes, right: bytes) -> bool:
+    """Compare AGWPE callsign fields without depending on padding bytes."""
+    return clean_call(left) == clean_call(right)
+
+
+def trace(direction: str, frame: "Frame") -> None:
+    if DEBUG:
+        markers = [
+            marker.decode("ascii")
+            for marker in (b";FW:", b"[Pat-", b";PR:", b"; ", b";PM", b"FC", b"F>", b"FF", b"FS ")
+            if marker in frame.data
+        ]
+        marker_text = f" markers={','.join(markers)}" if markers else ""
+        print(
+            f"AGW {direction} kind={frame.kind.decode('ascii', 'replace')} "
+            f"from={clean_call(frame.source)} to={clean_call(frame.destination)} "
+            f"bytes={len(frame.data)}{marker_text}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 @dataclass
@@ -66,7 +90,7 @@ def rewrite_outbound(frame: Frame, mailbox: bytes, packet: bytes) -> Frame:
     # Registration, connection control, connected data, and UI frames carry
     # the caller identity in the AGWPE From field.
     if frame.kind in {b"X", b"x", b"C", b"v", b"d", b"D", b"Y", b"M"}:
-        if frame.source == mailbox or frame.kind in {b"X", b"x"}:
+        if same_call(frame.source, mailbox) or frame.kind in {b"X", b"x"}:
             frame.raw_header[6] = packet
     return frame
 
@@ -74,8 +98,19 @@ def rewrite_outbound(frame: Frame, mailbox: bytes, packet: bytes) -> Frame:
 def rewrite_inbound(frame: Frame, mailbox: bytes, packet: bytes) -> Frame:
     # Dire Wolf addresses responses/data to the packet station. Pat must see
     # those frames addressed to the mailbox callsign it registered.
-    if frame.destination == packet:
+    if same_call(frame.destination, packet):
         frame.raw_header[7] = mailbox
+        # RMS Packet also echoes the RF station identity in the CMS status
+        # line.  Keep that application-level identity aligned with Pat's
+        # logged-in mailbox identity; rewriting only the AGW header leaves
+        # Pat looking at "*** N0JCG-3 Connected to CMS" while its session is
+        # registered as N0JCG.
+        packet_name = clean_call(packet).encode("ascii")
+        mailbox_name = clean_call(mailbox).encode("ascii")
+        if frame.kind in {b"D", b"d"} and (
+            b"Connected to CMS" in frame.data or b"CMS via " in frame.data
+        ):
+            frame.data = frame.data.replace(packet_name, mailbox_name)
     return frame
 
 
@@ -88,6 +123,7 @@ async def pipe_frames(
 ) -> None:
     while True:
         frame = await read_frame(reader)
+        trace("out" if outbound else "in", frame)
         if outbound:
             if frame.kind == b"X":
                 state["mailbox"] = frame.source
@@ -96,6 +132,10 @@ async def pipe_frames(
         else:
             mailbox = state.get("mailbox", packet)
             frame = rewrite_inbound(frame, mailbox, packet)
+            # Log the post-rewrite frame as well as the upstream frame. This
+            # confirms that Pat receives the CMS/PQ data under its mailbox
+            # identity instead of only proving that Dire Wolf delivered it.
+            trace("in->client", frame)
         writer.write(frame.encode())
         await writer.drain()
 

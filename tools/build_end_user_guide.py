@@ -119,7 +119,7 @@ def add_header_footer(doc):
         set_run(r, size=8, color=SLATE, bold=True)
         first_footer = section.first_page_footer.paragraphs[0]
         first_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.2    Page 1"), size=8, color=SLATE)
+        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.3    Page 1"), size=8, color=SLATE)
         add_bottom_rule(first_footer)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -233,7 +233,7 @@ def build():
     p.paragraph_format.space_after = Pt(26)
     set_run(p.add_run("A complete guide to the Raspberry Pi client appliance, Winlink mailbox access, DigiRig Mobile integration, and safe Packet RMS operation."), size=11, color=NAVY)
     add_table(doc, ["Release", "Publication"], [
-        ("0.1.2", "August 2026"),
+        ("0.1.3", "August 2026"),
         ("PRODUCT ROLE\nClient-side Winlink email", "AUDIENCE\nOperators and mailbox users"),
     ], [3.42, 3.42])
     doc.add_page_break()
@@ -311,12 +311,15 @@ def build():
     doc.add_paragraph("Open the webmail address and select Sign in with Winlink. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign. Webmail remains closed until Winlink CMS secure login is accepted; failed or timed-out authentication never opens a session or mailbox. After secure login succeeds, the session remains active for the browser session; refreshing the page does not sign the user out. Close the browser or select Log out to end the session.")
     add_callout(doc, "PRIVATE MAILBOX MODEL", "Mailbox access is isolated by callsign. A user cannot select another user’s mailbox from a URL or browser control.", PALE_CYAN)
     add_screenshot(doc, "webmail-inbox.png", "Figure 1. N0JCG webmail inbox and mailbox status on the client appliance.")
+    add_screenshot(doc, "mailbox-progress.png", "Figure 2. Webmail shows the authenticated mailbox and current synchronization state while a Packet RMS transfer is in progress.")
+    add_screenshot(doc, "operator-status.png", "Figure 3. Operator status separates device detection, service readiness, RF state, and the transmit safety policy.")
+    add_screenshot(doc, "operator-diagnostics.png", "Figure 4. Operator diagnostics provides a safe pre-radio checklist and a clear next action.")
     doc.add_page_break()
 
     doc.add_heading("4. Everyday webmail", level=1)
     doc.add_heading("Compose, templates, and drafts", level=2)
     doc.add_paragraph("Select Compose to open a blank form. At the top of the form, use Choose template to select an installed Winlink Standard Form, complete its fields, and insert an editable message. The Signature control is beside Choose template. Enter the Winlink recipient, subject, and message body. Select Save draft when work should remain local, or queue the message when the operator has enabled a verified transport path.")
-    add_screenshot(doc, "compose-message.png", "Figure 2. New message panel with attachment controls and the N0JCG navigation shell.")
+    add_screenshot(doc, "compose-message.png", "Figure 5. Compose panel with attachment controls and the N0JCG navigation shell.")
     doc.add_heading("Drafts, attachments, and signature", level=2)
     add_bullets(doc, [
         "The Drafts counter updates after saving. Open a draft to continue editing; queuing an opened draft removes it from Drafts and places it in Send queue.",
@@ -329,6 +332,9 @@ def build():
     doc.add_heading("Send queue and automatic synchronization", level=2)
     doc.add_paragraph("Queue message stages the message into Pat’s official outbox and immediately starts a Packet RMS synchronization. The Send queue shows queued, staged, and transmission state. After a successful send, the message is removed from Send queue and its counter updates automatically. The operator configures automatic mailbox synchronization in the operator console under Packet station → Automatic mailbox sync (minutes), from 5 to 1440 minutes; the default is 30 minutes.")
     doc.add_paragraph("After Pat reports the final outgoing-transfer command, WES clears the transmitted queue item promptly while the remainder of the mailbox synchronization continues. This prevents a successful send from appearing stuck while the session closes.")
+    doc.add_heading("Mailbox synchronization progress", level=2)
+    doc.add_paragraph("After Winlink secure login is accepted, WES opens the webmail session and continues the mailbox transfer in the background. The status message advances through the RMS connection, mailbox index, proposal, message selection, download, and finalization stages. A message such as 0 new emails were received means the authenticated mailbox was checked and no new messages were available in that exchange. The Refresh control is disabled while a transfer is active so an operator cannot interrupt the current RF session.")
+    doc.add_paragraph("If the radio session closes after one or more messages have been received, WES records the received messages and clears the stale in-progress state. A transport failure after authentication does not expose another user’s mailbox and does not invalidate the logged-in callsign unless authentication itself has been lost.")
     doc.add_page_break()
 
     doc.add_heading("5. Connect and verify the radio", level=1)
@@ -351,6 +357,10 @@ def build():
     doc.add_heading("6. Troubleshooting", level=1)
     doc.add_heading("Mailbox unavailable", level=2)
     doc.add_paragraph("This means the Winlink account was authenticated, but the local mailbox service is not currently available. It is not a request for the user to type a command. Connect the radio and select Refresh to start a mailbox synchronization. If the message persists, the operator should review the client service and diagnostics.")
+    doc.add_heading("Local delete versus Winlink Webmail", level=2)
+    doc.add_paragraph("The WES Inbox, folders, and delete actions manage the local appliance mailbox. Winlink Webmail is a separate CMS view and may continue to show the same server-side message after WES downloads or locally deletes it. Remove a message separately through Winlink Webmail when server-side retention also needs to change.")
+    doc.add_heading("A previous RF session is still active", level=2)
+    doc.add_paragraph("Only one mailbox user and one RF session are allowed at a time. A new login terminates the previous session, releases the Pat/AGW connection, and allows the radio path to settle before starting again. After a failed exchange, wait for the visible failure state and the RF activity to stop before retrying. The operator diagnostics show the last client/RF event.")
     doc.add_heading("Login fails or remains on Validating through the Winlink client…", level=2)
     doc.add_paragraph("Confirm the Winlink address and secure-login password. Check the Pi network connection, radio power, DigiRig cabling, frequency, packet station ID, RMS target, and system time. The login screen intentionally remains open until secure login is accepted; no mailbox is exposed during this wait. A failed RF exchange returns the user to the login screen. Repeated failed attempts are rate-limited for protection.")
     doc.add_heading("Device detected but not ready", level=2)

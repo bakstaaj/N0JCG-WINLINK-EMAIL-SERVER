@@ -86,14 +86,20 @@ sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/to
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools/apply_radio_profile.sh"
 sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tools/agwpe_identity_bridge.py"
 
-# Install the unmodified official Pat ARM64 client. WES supplies the logged-in
-# Winlink callsign dynamically; the AGWPE bridge supplies the local RF SSID.
-PAT_VERSION="${N0JCG_PAT_VERSION:-0.16.0}"
+# Install the Pat ARM64 client. The bundled client-side build is based on the
+# official Pat 0.17.0 source and uses the standard Winlink FBB exchange; its
+# only protocol-role change is selecting client-initiated FBB for AX.25 Packet
+# RMS. If the build artifact is absent, fall back to the official release.
+PAT_VERSION="${N0JCG_PAT_VERSION:-0.17.0}"
 PAT_ARCHIVE="pat_${PAT_VERSION}_linux_arm64.tar.gz"
 PAT_URL="https://github.com/la5nta/pat/releases/download/v${PAT_VERSION}/${PAT_ARCHIVE}"
 PAT_TMP="$(mktemp -d)"
 trap 'rm -rf "$PAT_TMP"' EXIT
-if [[ ! -x /usr/local/bin/pat ]] || ! /usr/local/bin/pat version 2>/dev/null | grep -q "Pat v${PAT_VERSION}"; then
+PAT_CLIENT_BINARY="$REPO_ROOT/tools/pat-winlink-client-rms"
+if [[ -f "$PAT_CLIENT_BINARY" ]]; then
+    sudo install -m 0755 "$PAT_CLIENT_BINARY" /usr/local/bin/pat
+    echo "PASS: client-side Packet RMS Pat installed"
+elif [[ ! -x /usr/local/bin/pat ]] || ! /usr/local/bin/pat version 2>/dev/null | grep -q "Pat v${PAT_VERSION}"; then
     curl --fail --location --silent --show-error "$PAT_URL" -o "$PAT_TMP/$PAT_ARCHIVE"
     tar -xzf "$PAT_TMP/$PAT_ARCHIVE" -C "$PAT_TMP"
     PAT_BINARY="$(find "$PAT_TMP" -type f -name pat -print -quit)"

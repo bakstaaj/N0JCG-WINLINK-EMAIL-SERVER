@@ -11,5 +11,6 @@ docs/rendered-guide-v3/
 docs/pdf-v2/
 docs/assets/operator-console.png
 docs/assets/manage-folders.png
+docker-build/
 .env.*
 !.env.example

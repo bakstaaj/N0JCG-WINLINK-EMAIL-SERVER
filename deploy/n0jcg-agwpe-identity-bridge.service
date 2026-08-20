@@ -8,6 +8,7 @@ Type=simple
 User=@APP_USER@
 Group=@APP_USER@
 EnvironmentFile=-/var/lib/n0jcg-winlink-webmail/radio-profile.conf
+Environment=N0JCG_AGW_DEBUG=1
 ExecStart=/usr/bin/python3 /opt/n0jcg-winlink/tools/agwpe_identity_bridge.py --listen-host 127.0.0.1 --listen-port 8002 --upstream-host 127.0.0.1 --upstream-port 8000 --packet-call ${N0JCG_PACKET_CALLSIGN}
 Restart=on-failure
 RestartSec=3

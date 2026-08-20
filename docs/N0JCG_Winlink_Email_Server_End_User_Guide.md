@@ -3,7 +3,7 @@
 ## End User Guide
 
 **N0JCG Open Radio Platform**
-**Document version:** 1.2
+**Document version:** 1.3
 **Appliance host:** `PI-WINLINK`
 
 ### What this appliance does
@@ -162,6 +162,12 @@ After Pat reports the final outgoing-transfer command, WES clears the transmitte
 queue item promptly while the remainder of the mailbox synchronization continues.
 This prevents a successful send from appearing stuck while the session closes.
 
+### Mailbox synchronization progress
+
+After Winlink secure login is accepted, WES opens the webmail session and continues the mailbox transfer in the background. The status message advances through the RMS connection, mailbox index, proposal, message selection, download, and finalization stages. A message such as **0 new emails were received** means the authenticated mailbox was checked and no new messages were available in that exchange. The **Refresh** control is disabled while a transfer is active so an operator cannot interrupt the current RF session.
+
+If the radio session closes after one or more messages have been received, WES records the received messages and clears the stale in-progress state. A transport failure after authentication does not expose another user’s mailbox and does not invalidate the logged-in callsign unless authentication itself has been lost.
+
 Attachments are limited to 100 KB. The interface warns when an attachment is larger than 10 KB because packet-radio transfer may be slow.
 
 ### Signature
@@ -195,6 +201,14 @@ After the software and account setup are complete:
 ### “Mailbox unavailable”
 
 This means the Winlink account was authenticated, but the local mailbox service is not currently available. It is not a request for the user to type a command. Connect the radio and select **Refresh** to start a mailbox synchronization. If the message persists, the operator should review the client service and diagnostics.
+
+### Local delete versus Winlink Webmail
+
+The WES Inbox, folders, and delete actions manage the local appliance mailbox. Winlink Webmail is a separate CMS view and may continue to show the same server-side message after WES downloads or locally deletes it. Remove a message separately through Winlink Webmail when server-side retention also needs to change.
+
+### A previous RF session is still active
+
+Only one mailbox user and one RF session are allowed at a time. A new login terminates the previous session, releases the Pat/AGW connection, and allows the radio path to settle before starting again. After a failed exchange, wait for the visible failure state and the RF activity to stop before retrying. The operator diagnostics show the last client/RF event.
 
 ### Login fails or remains on “Validating through the Winlink client…”
 

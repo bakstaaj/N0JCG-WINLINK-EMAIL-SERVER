@@ -16,6 +16,7 @@
   const mailboxBadge = document.querySelector('.status-badge');
   let sessionTimer;
   let syncTimer;
+  let authProgressTimer;
   let queueTimer;
   let autoSyncTimer;
   let redirectingToLogin = false;
@@ -32,6 +33,7 @@
     if (redirectingToLogin) return;
     redirectingToLogin = true;
     window.clearTimeout(syncTimer);
+    window.clearTimeout(authProgressTimer);
     window.clearTimeout(queueTimer);
     window.clearTimeout(autoSyncTimer);
     try {
@@ -65,14 +67,16 @@
       if (!response.ok) return;
       const body = await response.json();
       const active = ['CONNECTING', 'AUTHENTICATING'].includes(body.state)
-        || ['cms_connected', 'authenticating', 'downloading', 'uploading'].includes(body.stage)
+        || ['rms_connected', 'username_sent', 'password_sent', 'cms_connected', 'authenticating', 'mailbox_index', 'mailbox_records', 'mailbox_selection', 'downloading', 'uploading'].includes(body.stage)
         || (body.state === 'AUTHENTICATED' && !['complete', 'no_messages', 'failed'].includes(body.stage));
+      const syncFailedAfterLogin = body.state === 'AUTHENTICATED' && body.stage === 'failed';
+      setRefreshAvailability(active);
       if (body.state === 'ERROR') {
         window.clearTimeout(syncTimer);
         workspace.hidden = true;
         authGate.hidden = false;
         resetMailboxState();
-        authMessage(document.getElementById('login-form'), body.message || 'Winlink authentication failed.');
+        authMessage(document.getElementById('login-form'), body.message || 'The RMS server stopped responding before authentication completed. Check the selected RMS gateway, radio frequency, audio, and PTT path.');
         return;
       }
       if (mailboxBadge && currentCallsign) {
@@ -81,8 +85,8 @@
         const pending = Number.isInteger(body.pending_count) ? ` · ${body.pending_count} message${body.pending_count === 1 ? '' : 's'} ${pendingLabel}` : (body.outgoing_count ? ` · ${body.outgoing_count} message${body.outgoing_count === 1 ? '' : 's'} ${body.stage === 'complete' ? 'sent' : 'sending'}` : '');
         mailboxBadge.textContent = `${body.state === 'AUTHENTICATED' ? '✓ Mailbox: Connected' : '… Mailbox: Connecting'} - ${currentCallsign}${pending}`;
       }
-      syncStatus.hidden = !active;
-      syncStatus.textContent = active ? (body.message || 'Synchronizing the Winlink mailbox…') : (body.message || '');
+      syncStatus.hidden = !(active || syncFailedAfterLogin);
+      syncStatus.textContent = (active || syncFailedAfterLogin) ? (body.message || 'Synchronizing the Winlink mailbox…') : (body.message || '');
       if (active) {
         window.clearTimeout(syncTimer);
         syncTimer = window.setTimeout(pollMailboxSync, 1000);
@@ -250,7 +254,8 @@
       if (!response.ok) throw new Error(body.error || 'Mailbox is unavailable.');
       if (body.state === 'SYNCING') {
         folderTitle.textContent = 'Inbox';
-        folderView.innerHTML = '<strong>Mailbox synchronization in progress</strong><p>Your Winlink login is active. Messages will appear as the Packet RMS transfer completes.</p>';
+        const sync = body.sync || {};
+        folderView.innerHTML = `<strong>${escapeHtml(sync.stage_label || 'Mailbox synchronization in progress')}</strong><p>${escapeHtml(sync.message || 'Your Winlink login is active. Messages will appear as the Packet RMS transfer completes.')}</p>`;
         return;
       }
       if (body.state === 'NO_MESSAGES') {
@@ -522,6 +527,15 @@
       syncStatus.hidden = true;
       syncStatus.textContent = '';
     }
+    setRefreshAvailability(false);
+  }
+
+  function setRefreshAvailability(transferActive) {
+    const button = document.querySelector('[data-action="refresh"]');
+    if (!button) return;
+    button.disabled = Boolean(transferActive);
+    button.setAttribute('aria-busy', transferActive ? 'true' : 'false');
+    button.textContent = transferActive ? 'Sync in progress…' : 'Refresh';
   }
 
   async function logout() {
@@ -554,9 +568,26 @@
     redirectingToLogin = false;
     const formElement = event.currentTarget;
     const data = Object.fromEntries(new FormData(formElement));
+    const callsign = String(data.email || '').split('@', 1)[0].trim().toUpperCase();
     const button = formElement.querySelector('button[type="submit"]');
+    let lastAuthProgressMessage = '';
     button.disabled = true;
     authMessage(formElement, 'Validating through the Winlink client…');
+    const pollAuthProgress = async () => {
+      if (!callsign) return;
+      try {
+        const progressResponse = await nativeFetch(`/api/v1/auth/progress?callsign=${encodeURIComponent(callsign)}`, { cache: 'no-store' });
+        if (progressResponse.ok) {
+          const progress = await progressResponse.json();
+          if (['CONNECTING', 'AUTHENTICATING'].includes(progress.state) || ['connecting', 'rms_connected', 'username_sent', 'password_sent', 'cms_connected', 'authenticating', 'mailbox_index', 'mailbox_records', 'mailbox_selection', 'downloading', 'uploading', 'complete', 'no_messages'].includes(progress.stage)) {
+            lastAuthProgressMessage = progress.message || progress.stage_label || 'Contacting the RMS gateway…';
+            authMessage(formElement, lastAuthProgressMessage);
+          }
+        }
+      } catch (_) { /* login request remains authoritative */ }
+      authProgressTimer = window.setTimeout(pollAuthProgress, 700);
+    };
+    pollAuthProgress();
     try {
       const response = await fetch('/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       const body = await response.json().catch(() => ({}));
@@ -565,7 +596,7 @@
         const retryMinutes = Math.max(1, Math.ceil(retrySeconds / 60));
         throw new Error(`Too many login attempts. Try again in about ${retryMinutes} minute${retryMinutes === 1 ? '' : 's'}.`);
       }
-      if (!response.ok) throw new Error(body.error || 'Mailbox validation is unavailable.');
+      if (!response.ok) throw new Error(body.error || 'The RMS server did not complete authentication. Check the RMS target, frequency, radio mode, audio, and PTT path.');
       authGate.hidden = true;
       workspace.hidden = false;
       currentCallsign = body.callsign;
@@ -578,8 +609,12 @@
       pollMailboxSync();
       scheduleAutomaticSync();
     } catch (error) {
-      authMessage(formElement, error.message + ' No mailbox data was opened.');
+      const detail = error.message === 'The RMS server did not complete authentication. Check the RMS target, frequency, radio mode, audio, and PTT path.' && lastAuthProgressMessage
+        ? `${lastAuthProgressMessage} The RMS server did not return a final mailbox/authentication result.`
+        : error.message;
+      authMessage(formElement, `${detail} No mailbox data was opened. Check the operator diagnostics for the last RF/client event.`);
     } finally {
+      window.clearTimeout(authProgressTimer);
       button.disabled = false;
     }
   }
@@ -665,13 +700,13 @@
       if (!response.ok) throw new Error(body.error || 'Mailbox synchronization could not be started.');
       syncStatus.hidden = false;
       syncStatus.textContent = 'Starting a new Packet RMS synchronization…';
+      setRefreshAvailability(true);
       await showFolder('inbox');
       pollMailboxSync();
     } catch (error) {
       syncStatus.hidden = false;
       syncStatus.textContent = error.message;
-    } finally {
-      button.disabled = false;
+      setRefreshAvailability(false);
     }
   });
   document.querySelector('[data-action="save-draft"]').addEventListener('click', async () => {

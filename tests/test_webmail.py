@@ -45,12 +45,97 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("PAT_POST_AUTH_TIMEOUT", source)
         self.assertIn("pat-watchdog", source)
 
+    def test_post_auth_transport_close_after_progress_is_not_reported_as_login_failure(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('progressed_stages = {"downloading", "uploading", "finalizing", "no_messages", "complete"}', source)
+        self.assertIn("RMS closed the packet session", source)
+
+    def test_packet_login_wait_allows_rf_cms_handoff(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('N0JCG_PAT_LOGIN_WAIT_SECONDS", "180"', source)
+        self.assertIn("PAT_LOGIN_WAIT", source)
+
+    def test_operator_diagnostics_use_actual_packet_services(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('service_state("n0jcg-direwolf.service")', source)
+        self.assertIn('service_state("n0jcg-agwpe-identity-bridge.service")', source)
+        self.assertIn('"pat": "on-demand"', source)
+
+    def test_authentication_progress_has_safe_granular_stages(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('"stage_label": "Contacting RMS"', source)
+        self.assertIn("Mailbox proposal received", source)
+        self.assertIn('job["stage"] = "complete"', source)
+        self.assertIn("packet session closed cleanly", source)
+        self.assertIn('job["stage"] = "finalizing"', source)
+        self.assertIn('job["received"] = int(job.get("received") or 0) + 1', source)
+        self.assertIn("Mailbox transfer partially completed", source)
+        self.assertIn("0 new emails were received", source)
+        self.assertIn("def mark_post_auth_sync_failure(job, message):", source)
+        self.assertIn('job["state"] = "AUTHENTICATED"', source)
+        self.assertIn('"stage_label"] = "RMS connected"', source)
+        self.assertIn("Waiting for the RMS packet-session response", source)
+        self.assertIn("Mailbox index requested; waiting for RMS message records", source)
+        self.assertIn("RMS mailbox records received; waiting for the mailbox summary (F>)", source)
+        self.assertIn("Message selection sent; waiting for the RMS download", source)
+        self.assertIn("RMS mailbox records received; waiting for the mailbox summary (F>)", source)
+        self.assertIn("RMS mailbox records were received, but the mailbox summary (F>) did not arrive", source)
+        self.assertIn("The RMS server did not return a final mailbox/authentication result", (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8"))
+        self.assertIn('"stage_label"] = "Username sent"', source)
+        self.assertIn('"stage_label"] = "Secure response sent"', source)
+        self.assertIn('/api/v1/auth/progress?', source)
+        self.assertNotIn('job["message"] = f"Password', source)
+
+    def test_nginx_allows_slow_packet_rms_login_to_finish(self):
+        source = (ROOT / "deploy" / "nginx" / "n0jcg-winlink.conf").read_text(encoding="utf-8")
+        self.assertIn("proxy_read_timeout 240s", source)
+        self.assertIn("proxy_send_timeout 240s", source)
+
+    def test_common_pat_failures_have_actionable_explanations(self):
+        self.assertIn("Verify the RMS target, frequency, 1200-AFSK mode", MODULE.meaningful_pat_error("Unable to establish connection to remote: port closed"))
+        self.assertIn("secure login stage completed", MODULE.meaningful_pat_error("Exchange failed: connection lost", "mailbox_index"))
+        self.assertIn("Winlink rejected", MODULE.meaningful_pat_error("Login failed - invalid password"))
+        self.assertIn("protocol response", MODULE.meaningful_pat_error("Got unexpected protocol line: 'CMS via N0JCG >'"))
+
+    def test_deployment_uses_official_pat_with_fbb_turnover_fix(self):
+        source = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
+        self.assertIn('PAT_VERSION="${N0JCG_PAT_VERSION:-0.17.0}"', source)
+        self.assertIn("bundled client-side build", source)
+        self.assertIn('PAT_CLIENT_BINARY="$REPO_ROOT/tools/pat-winlink-client-rms"', source)
+
+    def test_new_login_restarts_a_stale_pat_session(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn("def start_pat_sync(callsign, password, restart=False):", source)
+        self.assertIn("start_pat_sync(callsign, password, restart=True)", source)
+        self.assertIn("new login must never inherit a Pat process", source)
+        self.assertIn("PAT_RF_COOLDOWN_SECONDS", source)
+        self.assertIn("def stop_all_pat_sessions(message, cooldown=True):", source)
+        self.assertIn("time.sleep(PAT_RF_COOLDOWN_SECONDS)", source)
+
+    def test_new_login_is_appliance_wide_single_user(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn("def reset_single_user_appliance(message):", source)
+        self.assertIn("SESSIONS.clear()", source)
+        self.assertIn("reset_single_user_appliance(\"A new Winlink user signed in", source)
+
     def test_webmail_clears_authentication_on_protected_api_unauthorized(self):
         script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
         self.assertIn("async function requireLogin", script)
         self.assertIn("nativeFetch('/api/v1/auth/logout'", script)
         self.assertIn("response.status === 401 && protectedWebmailRequest", script)
         self.assertIn("document.getElementById('login-form').reset()", script)
+
+    def test_post_auth_sync_failure_does_not_redirect_to_login(self):
+        script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        self.assertIn("syncFailedAfterLogin", script)
+        self.assertIn("syncStatus.hidden = !(active || syncFailedAfterLogin)", script)
+
+    def test_refresh_is_disabled_during_mailbox_transfer(self):
+        script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        self.assertIn("function setRefreshAvailability(transferActive)", script)
+        self.assertIn("button.disabled = Boolean(transferActive)", script)
+        self.assertIn("setRefreshAvailability(active)", script)
+        self.assertIn("Sync in progress…", script)
 
     def test_normalize_account_returns_callsign(self):
         email, callsign = MODULE.normalize_account("n0jcg@winlink.org")

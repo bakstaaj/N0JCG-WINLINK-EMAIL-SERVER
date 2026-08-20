@@ -54,8 +54,14 @@ PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "300"))
 # The browser must not receive a mailbox session until CMS secure login is
 # accepted. This wait covers RF connection and challenge exchange only; the
 # subsequent mailbox transfer remains asynchronous.
-PAT_LOGIN_WAIT = int(os.environ.get("N0JCG_PAT_LOGIN_WAIT_SECONDS", "90"))
+# Packet RMS secure-login can require several RF retries before CMS hands
+# control to Pat. Keep the on-demand process alive through that exchange;
+# this is not the overall mailbox-transfer timeout.
+PAT_LOGIN_WAIT = int(os.environ.get("N0JCG_PAT_LOGIN_WAIT_SECONDS", "180"))
 PAT_POST_AUTH_TIMEOUT = int(os.environ.get("N0JCG_PAT_POST_AUTH_TIMEOUT_SECONDS", "180"))
+# Allow the radio, AGWPE bridge, and PTT path to settle after a forced stop.
+# This is deliberately independent of the radio profile and RMS settings.
+PAT_RF_COOLDOWN_SECONDS = int(os.environ.get("N0JCG_PAT_RF_COOLDOWN_SECONDS", "10"))
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
@@ -166,6 +172,31 @@ def pat_failure_detail(output, returncode, password):
     return f"Pat authentication failed (exit {returncode})." + (f" {detail}" if detail else "")
 
 
+def meaningful_pat_error(detail, stage=""):
+    """Turn common Pat/RMS failures into operator-actionable diagnostics."""
+    text = str(detail or "").strip()
+    lowered = text.lower()
+    if "port closed" in lowered or "unable to establish connection" in lowered:
+        return "The RMS gateway did not accept the packet connection. Verify the RMS target, frequency, 1200-AFSK mode, radio audio, and PTT path."
+    if "retryout" in lowered or "connection timed out" in lowered or "timed out" in lowered:
+        return "The radio reached the connection attempt but the RMS did not complete the packet session before timeout. Check frequency, squelch, audio level, and whether the selected RMS is reachable."
+    if "connection lost" in lowered or "closed network connection" in lowered:
+        if stage == "mailbox_records":
+            return "The RMS sent mailbox records, but the mailbox summary (F>) did not reach the client. Check the RMS/KISS/Dire Wolf downlink path."
+        if stage in {"mailbox_index", "password_sent", "username_sent"}:
+            return "The RMS connection closed before the mailbox index was returned. The secure login stage completed, but the gateway did not finish opening the mailbox."
+        return "The packet connection closed unexpectedly. Check the DigiRig audio/PTT path and review the operator RF log for retries."
+    if "unexpected protocol line" in lowered:
+        return "The RMS returned a protocol response that Pat could not interpret. Confirm the selected target is a Winlink RMS Packet gateway, not a node or Telnet prompt."
+    if "read-only file system" in lowered or "permission denied" in lowered:
+        return "The local Winlink mailbox storage is not writable. Check Pi disk space and permissions for the Pat mailbox directory."
+    if "exit 126" in lowered or "no such file or directory" in lowered:
+        return "The Pat transport command could not be started. Ask the operator to verify the installed Pat client and configured executable path."
+    if "login failed" in lowered or "invalid password" in lowered or "authentication failed" in lowered:
+        return "Winlink rejected the secure-login credentials. Verify the callsign and Winlink password, then try again."
+    return text or "The Winlink client stopped without reporting a specific reason. Review the operator diagnostics and Pat log."
+
+
 def pat_validate(callsign, password):
     """Perform a real CMS/Telnet login using Pat and return evidence."""
     config = None
@@ -202,13 +233,13 @@ def pat_validate(callsign, password):
         if FAILURE_RE.search(output):
             return False, "Winlink rejected the secure-login credentials."
         if result.returncode != 0:
-            return False, pat_failure_detail(output, result.returncode, password)
+            return False, meaningful_pat_error(output, "connecting")
         if not SUCCESS_RE.search(output):
             return False, "AX.25 connected, but Pat did not begin the Winlink mailbox exchange."
         transport = "Packet RMS" if connect_url.startswith("ax25") else "Winlink CMS"
         return True, f"{transport} authentication succeeded; isolated Pat mailbox initialized."
     except subprocess.TimeoutExpired:
-        return False, "Winlink authentication timed out."
+        return False, "The RMS server did not complete the authentication exchange before timeout. Verify the selected gateway and RF path, then try again."
     except RuntimeError as exc:
         return False, str(exc)
     finally:
@@ -221,7 +252,67 @@ def sync_status(callsign):
         job = SYNC_JOBS.get(callsign)
         if not job:
             return {"state": "IDLE", "stage": "idle", "message": "No mailbox synchronization is running."}
-        return {key: job.get(key) for key in ("state", "stage", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count", "rms_target", "last_line")}
+        return {key: job.get(key) for key in ("state", "stage", "stage_label", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count", "rms_target", "last_line")}
+
+
+def terminate_pat_process(process):
+    """Stop Pat promptly and release its AGW/PTT connection."""
+    if not process or process.poll() is not None:
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def cancel_pat_job(job, message):
+    """Mark a sync cancelled and terminate its transport process."""
+    if not job:
+        return
+    with LOCK:
+        job["state"] = "ERROR"
+        job["stage"] = "cancelled"
+        job["message"] = message
+        job["error_event"].set()
+        process = job.get("process")
+    terminate_pat_process(process)
+
+
+def mark_post_auth_sync_failure(job, message):
+    """Record a transport failure without invalidating the Winlink session."""
+    if not job:
+        return
+    with LOCK:
+        job["state"] = "AUTHENTICATED"
+        job["stage"] = "failed"
+        job["stage_label"] = "Synchronization failed"
+        job["message"] = message
+        job["error_event"].set()
+
+
+def stop_all_pat_sessions(message, cooldown=True):
+    """Stop all appliance RF sessions and optionally wait for RF/PTT settle."""
+    with LOCK:
+        jobs = list(SYNC_JOBS.values())
+        SESSIONS.clear()
+    had_live_process = False
+    for job in jobs:
+        process = job.get("process")
+        had_live_process = had_live_process or bool(process and process.poll() is None)
+        cancel_pat_job(job, message)
+    if cooldown and had_live_process and PAT_RF_COOLDOWN_SECONDS > 0:
+        time.sleep(PAT_RF_COOLDOWN_SECONDS)
+    return had_live_process
+
+
+def reset_single_user_appliance(message):
+    """Enforce the appliance's one-user-at-a-time mailbox boundary."""
+    return stop_all_pat_sessions(message, cooldown=True)
 
 
 def _pat_sync_worker(callsign, password, config, process, job):
@@ -235,30 +326,68 @@ def _pat_sync_worker(callsign, password, config, process, job):
                 job["updated_at"] = time.time()
                 job["last_line"] = line[-500:]
                 if "Connected to CMS" in line:
-                    job["stage"] = "cms_connected"
-                    job["message"] = "Connected to Winlink CMS; completing secure login."
-                elif line.startswith(";PQ"):
-                    job["stage"] = "authenticating"
+                    job["stage"] = "username_sent"
+                    job["stage_label"] = "Username sent"
+                    job["message"] = "RMS connected; Winlink callsign sent. Waiting for the RMS packet-session response."
+                elif re.search(r"Stream .*Connected to|Connected to [A-Z0-9-]+(?:\s|$)|Connected to .*\(v", line, re.I):
+                    job["stage"] = "rms_connected"
+                    job["stage_label"] = "RMS connected"
+                    job["message"] = "RMS connected; establishing the packet session."
+                elif re.search(r"Login \[\d+\]|;PQ", line, re.I):
+                    job["stage"] = "password_sent"
+                    job["stage_label"] = "Secure response sent"
+                    job["message"] = "RMS secure-login challenge received; protected response sent."
+                    if line.startswith(";PQ"):
+                        job["state"] = "AUTHENTICATED"
+                        job["post_auth_deadline"] = time.time() + PAT_POST_AUTH_TIMEOUT
+                        job["auth_event"].set()
+                    if line.startswith(";PQ"):
+                        job["stage"] = "mailbox_index"
+                        job["stage_label"] = "Secure login accepted"
+                        job["message"] = "Winlink secure login accepted; requesting mailbox index."
+                elif line.lstrip(">") == "FF" and job.get("stage") not in {"downloading", "uploading", "complete"}:
                     job["state"] = "AUTHENTICATED"
-                    job["message"] = "Winlink secure login accepted; requesting mailbox index."
-                    job["post_auth_deadline"] = time.time() + PAT_POST_AUTH_TIMEOUT
+                    job["stage"] = "mailbox_index"
+                    job["stage_label"] = "Mailbox index requested"
+                    job["message"] = "Mailbox index requested; waiting for RMS message records."
                     job["auth_event"].set()
-                elif re.search(r"\d+ proposal\(s\) received", line, re.I):
-                    job["pending_count"] = int(re.search(r"(\d+) proposal", line, re.I).group(1))
+                elif re.match(r"^>?PM(?:\s|:)|^;PM", line, re.I):
                     job["state"] = "AUTHENTICATED"
-                    job["stage"] = "downloading"
-                    job["message"] = "Mailbox opened; downloading messages."
+                    job["stage"] = "mailbox_index"
+                    job["stage_label"] = "Mailbox proposal received"
+                    job["message"] = "RMS mailbox proposal received; accepting the mailbox transfer."
                     job["auth_event"].set()
                 elif line.startswith(">FC EM"):
                     job["outgoing_count"] = int(job.get("outgoing_count") or 0) + 1
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "uploading"
+                    job["stage_label"] = "Uploading queued mail"
                     job["message"] = f"Mailbox authenticated; sending {job['outgoing_count']} queued message(s)."
+                    job["auth_event"].set()
+                elif re.match(r"^>?F>(?:\s|$)|^>?FC(?:\s|$)", line, re.I):
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "mailbox_records"
+                    job["stage_label"] = "Mailbox records received"
+                    job["message"] = "RMS mailbox records received; waiting for the mailbox summary (F>)."
+                    job["auth_event"].set()
+                elif line.startswith(">FS"):
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "mailbox_selection"
+                    job["stage_label"] = "Message selection sent"
+                    job["message"] = "Message selection sent; waiting for the RMS download."
+                    job["auth_event"].set()
+                elif re.search(r"\d+ proposal\(s\) received", line, re.I):
+                    job["pending_count"] = int(re.search(r"(\d+) proposal", line, re.I).group(1))
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "downloading"
+                    job["stage_label"] = "Mailbox opened"
+                    job["message"] = "Mailbox opened; downloading messages."
                     job["auth_event"].set()
                 elif "No messages" in line or "0 proposal(s)" in line:
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "no_messages"
-                    job["message"] = "The RMS returned no downloadable proposals in this exchange."
+                    job["stage_label"] = "Mailbox checked"
+                    job["message"] = "Mailbox synchronization complete; 0 new emails were received."
                     job["pending_count"] = 0
                     job["auth_event"].set()
                 elif line.lstrip(">").strip() == "FQ":
@@ -272,13 +401,28 @@ def _pat_sync_worker(callsign, password, config, process, job):
                             db.commit()
                         job["sent"] = job.get("outgoing_count") or 0
                     job["state"] = "AUTHENTICATED"
-                    job["stage"] = "no_messages"
-                    job["message"] = "The RMS returned no downloadable proposals in this exchange."
-                    job["pending_count"] = 0
+                    job["stage"] = "complete"
+                    job["stage_label"] = "Mailbox synchronization complete"
+                    job["message"] = "Mailbox synchronization complete; 0 new emails were received and the packet session closed cleanly."
                     job["auth_event"].set()
-                elif re.search(r"Receiving \[|Sending \[|received", line, re.I):
-                    job["stage"] = "downloading"
-                    job["message"] = "Mailbox opened; message transfer in progress."
+                elif re.search(r"Receiving \[", line, re.I):
+                    job["received"] = int(job.get("received") or 0) + 1
+                    job["state"] = "AUTHENTICATED"
+                    if job.get("pending_count") and job["received"] >= job["pending_count"]:
+                        job["stage"] = "finalizing"
+                        job["stage_label"] = "Messages received"
+                        job["message"] = f"All {job['received']} accepted message(s) received; finalizing the RMS session."
+                    else:
+                        job["stage"] = "downloading"
+                        job["stage_label"] = "Downloading messages"
+                        job["message"] = f"Mailbox opened; received {job['received']} message(s)."
+                    job["auth_event"].set()
+                elif re.search(r"\b(?:DISC|UA)\b|Disconnected|connection lost", line, re.I) and job.get("received", 0):
+                    job["state"] = "AUTHENTICATED"
+                    job["stage"] = "complete"
+                    job["stage_label"] = "Transfer complete"
+                    job["message"] = f"Mailbox transfer complete; received {job['received']} message(s) before the RMS session closed."
+                    job["auth_event"].set()
         returncode = process.wait()
         with LOCK:
             if returncode == 0 and job["state"] == "AUTHENTICATED":
@@ -286,31 +430,61 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     db.execute("UPDATE mailbox_queue SET state='SENT' WHERE callsign=? AND state='STAGED'", (callsign,))
                     db.commit()
                 job["stage"] = "complete"
+                job["stage_label"] = "Complete"
                 job["message"] = "Mailbox synchronization complete."
             if returncode != 0 and job["state"] == "AUTHENTICATED":
-                job["state"] = "ERROR"
-                job["stage"] = "failed"
-                detail = job.get("last_line") or "Pat stopped after secure login before the mailbox index was received."
-                job["message"] = f"Winlink mailbox synchronization failed after secure login. {detail}"
-                job["error_event"].set()
+                # Pat may return a non-zero status when the RMS closes a
+                # long packet exchange after the mailbox data has already
+                # been transferred.  Once the mailbox protocol has reached
+                # a real result or data-transfer stage, this is a completed
+                # (possibly partial) sync, not an authentication failure.
+                # Treating every post-auth socket close as fatal logged users
+                # out even though the newly received files were on disk.
+                progressed_stages = {"downloading", "uploading", "finalizing", "no_messages", "complete"}
+                if job.get("stage") in progressed_stages:
+                    with sqlite3.connect(DB_PATH) as db:
+                        db.execute("UPDATE mailbox_queue SET state='SENT' WHERE callsign=? AND state='STAGED'", (callsign,))
+                        db.commit()
+                    detail = job.get("last_line") or "The RMS closed the packet session after mailbox progress."
+                    received = int(job.get("received") or 0)
+                    offered = int(job.get("pending_count") or 0)
+                    job["stage"] = "complete"
+                    job["stage_label"] = "Transfer complete"
+                    if offered and received < offered:
+                        job["message"] = f"Mailbox transfer partially completed; received {received} of {offered} offered message(s). The RMS closed the packet session. {detail}"
+                    elif received:
+                        job["message"] = f"Mailbox synchronization completed; received {received} message(s) before the RMS closed the packet session. {detail}"
+                    else:
+                        job["message"] = f"Mailbox synchronization completed; the RMS closed the packet session after mailbox progress. {detail}"
+                else:
+                    detail = job.get("last_line") or "Pat stopped after secure login before the mailbox index was received."
+                    mark_post_auth_sync_failure(job, meaningful_pat_error(detail, job.get("stage", "")))
             elif job["state"] not in ("AUTHENTICATED", "ERROR"):
                 if returncode == 0:
                     job["state"] = "ERROR"
                     job["stage"] = "failed"
+                    job["stage_label"] = "Failed"
                     job["message"] = "Winlink exchange ended before the mailbox result was confirmed."
                     job["error_event"].set()
                 else:
                     job["state"] = "ERROR"
                     job["stage"] = "failed"
+                    job["stage_label"] = "Failed"
                     detail = job.get("last_line") or "The client stopped before reporting a connection attempt."
-                    job["message"] = f"Winlink mailbox synchronization failed. {detail}"
+                    job["message"] = meaningful_pat_error(detail, job.get("stage", ""))
                     job["error_event"].set()
     except Exception as exc:
         with LOCK:
-            job["state"] = "ERROR"
-            job["stage"] = "failed"
-            job["message"] = str(exc)
-            job["error_event"].set()
+            authenticated = job.get("state") == "AUTHENTICATED"
+        if authenticated:
+            mark_post_auth_sync_failure(job, meaningful_pat_error(str(exc), job.get("stage", "")))
+        else:
+            with LOCK:
+                job["state"] = "ERROR"
+                job["stage"] = "failed"
+                job["stage_label"] = "Failed"
+                job["message"] = meaningful_pat_error(str(exc), job.get("stage", ""))
+                job["error_event"].set()
     finally:
         config.unlink(missing_ok=True)
 
@@ -325,25 +499,38 @@ def _pat_sync_watchdog(job):
             deadline = job.get("post_auth_deadline")
             state = job.get("state")
             stage = job.get("stage")
-        if deadline and time.time() >= deadline and state == "AUTHENTICATED" and stage == "authenticating":
-            with LOCK:
-                job["state"] = "ERROR"
-                job["stage"] = "failed"
-                job["message"] = "Winlink mailbox index timed out after secure login. The RMS did not complete the mailbox request."
-                job["error_event"].set()
-            process.terminate()
+        if deadline and time.time() >= deadline and state == "AUTHENTICATED" and stage in ("authenticating", "mailbox_index", "mailbox_records"):
+            if stage == "mailbox_records":
+                timeout_message = "RMS mailbox records were received, but the mailbox summary (F>) did not arrive before timeout. Check the RMS/KISS/Dire Wolf downlink path, then try Refresh."
+            else:
+                timeout_message = "Secure login was accepted, but the RMS did not return the mailbox index in time. Verify the selected gateway and RF receive path, then try Refresh."
+            mark_post_auth_sync_failure(job, timeout_message)
+            terminate_pat_process(process)
             return
         time.sleep(1)
 
 
-def start_pat_sync(callsign, password):
+def start_pat_sync(callsign, password, restart=False):
     mailbox_dir = STATE_DIR / "mailbox" / callsign
     mailbox_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(mailbox_dir, 0o700)
     with LOCK:
         existing = SYNC_JOBS.get(callsign)
         if existing and existing.get("process") and existing["process"].poll() is None:
-            return existing
+            if not restart:
+                return existing
+            # A new login must never inherit a Pat process left at an old
+            # CMS prompt. Refresh/sync calls reuse a healthy active process,
+            # but authentication starts a completely fresh RF session.
+            existing["state"] = "ERROR"
+            existing["stage"] = "cancelled"
+            existing["stage_label"] = "Restarting"
+            existing["message"] = "Previous Packet RMS attempt stopped; starting a fresh authentication session."
+            existing["error_event"].set()
+            old_process = existing.get("process")
+        else:
+            old_process = None
+    terminate_pat_process(old_process)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="n0jcg-pat-sync-", suffix=".json", delete=False) as handle:
         config = Path(handle.name)
     write_pat_config(callsign, password, config)
@@ -365,7 +552,7 @@ def start_pat_sync(callsign, password):
             raise RuntimeError("Pat client is not installed on the appliance.")
         command[0] = alternate
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
-    job = {"process": process, "state": "CONNECTING", "stage": "connecting", "message": f"Connecting to Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
+    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
     with LOCK:
         SYNC_JOBS[callsign] = job
     threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()
@@ -379,12 +566,22 @@ def wait_for_pat_auth(job, timeout=35):
         if job["auth_event"].is_set():
             return True, "Winlink secure login accepted; mailbox synchronization is continuing."
         if job["error_event"].is_set():
-            return False, job.get("message", "Winlink authentication failed.")
+            return False, job.get("message", "Winlink authentication failed. The RMS server stopped responding before secure login completed.")
         process = job.get("process")
         if process and process.poll() is not None:
             return False, job.get("message", "Winlink authentication failed before secure login was accepted.")
         time.sleep(0.25)
-    return False, "Winlink authentication timed out before secure login was accepted."
+    stage = job.get("stage", "connecting")
+    if stage == "connecting":
+        message = "No RMS connection was confirmed before timeout. Verify the target, frequency, radio mode, audio, and PTT path."
+    elif stage == "rms_connected":
+        message = "The RMS server connection was established, but the gateway did not complete the packet session before timeout."
+    elif stage == "username_sent":
+        message = "The Winlink callsign was sent, but the RMS server did not return a usable packet-session response before timeout."
+    else:
+        message = "The RMS server did not complete the secure-login exchange before timeout. Review the operator RF log for retries or a disconnected session."
+    cancel_pat_job(job, message)
+    return False, message
 
 
 def pat_mailbox_request(session, box, mid=None, method="GET", payload=None, suffix=""):
@@ -520,7 +717,7 @@ def operator_diagnostics():
         "source": "local_probe",
         "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "transmit_policy": "PACKET_SESSION_CONTROLLED",
-        "services": {"webmail": service_state("n0jcg-webmail.service"), "pat": service_state("pat@pi.service"), "direwolf": service_state("direwolf.service")},
+        "services": {"webmail": service_state("n0jcg-webmail.service"), "pat": "on-demand", "direwolf": service_state("n0jcg-direwolf.service"), "agwpe_bridge": service_state("n0jcg-agwpe-identity-bridge.service")},
         "binaries": {"pat": bool(shutil.which("pat-winlink") or shutil.which("pat")), "direwolf": bool(shutil.which("direwolf"))},
         "devices": devices,
         "standard_forms": {"available": bool(templates.get("available")), "version": templates.get("version", ""), "count": len(templates.get("templates", []))},
@@ -708,10 +905,19 @@ class Handler(BaseHTTPRequestHandler):
                 password = str(data.get("password") or "")
                 if len(password) < 1 or len(password) > 256:
                     raise ValueError("Winlink password is required")
+                # This appliance is intentionally single-user. A new login
+                # always invalidates prior browser sessions and stops every
+                # Pat/RMS process, including jobs for a different callsign.
+                reset_single_user_appliance("A new Winlink user signed in; the previous mailbox session was closed.")
                 staged = stage_queued_messages({"callsign": callsign, "password": password})
-                job = start_pat_sync(callsign, password)
+                job = start_pat_sync(callsign, password, restart=True)
                 authenticated, evidence = wait_for_pat_auth(job, PAT_LOGIN_WAIT)
                 if not authenticated:
+                    cancel_pat_job(job, evidence)
+                    # Do not leave a failed login's AGWPE/RF session active
+                    # while the browser reports the error or retries.
+                    if PAT_RF_COOLDOWN_SECONDS > 0:
+                        time.sleep(PAT_RF_COOLDOWN_SECONDS)
                     record_login_failure(client_id)
                     self.send_json(HTTPStatus.UNAUTHORIZED, {"error": evidence, "source": "pat"})
                     return
@@ -736,6 +942,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/v1/auth/logout":
                 session = session_from(self)
                 if session:
+                    with LOCK:
+                        active_job = SYNC_JOBS.get(session["callsign"])
+                    cancel_pat_job(active_job, "Mailbox synchronization stopped when the user logged out.")
                     with LOCK:
                         SESSIONS.pop(session["token"], None)
                 self.send_json(HTTPStatus.OK, {"authenticated": False}, clear_session_cookie())
@@ -946,6 +1155,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"authenticated": False})
             else:
                 self.send_json(HTTPStatus.OK, session_view(session))
+            return
+        if self.path.startswith("/api/v1/auth/progress?"):
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            callsign = str((query.get("callsign") or [""])[0]).strip().upper()
+            if not re.fullmatch(r"[A-Z0-9][A-Z0-9-]{2,15}", callsign):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid callsign"})
+                return
+            progress = sync_status(callsign)
+            self.send_json(HTTPStatus.OK, {"callsign": callsign, **progress})
             return
         if self.path == "/api/v1/mail/sync":
             if not session:

@@ -1,14 +1,18 @@
-Pat v0.16.0 packet-client handshake adjustment
+N0JCG client-side Packet RMS Pat build
 
-In connect.go, change the exchange call to make AX.25 transports client-initiated:
+Base: official Pat v0.17.0 and wl2k-go v0.12.1.
 
-    clientInitiated := strings.HasPrefix(url.Scheme, MethodAX25)
-    err = exchange(conn, url.Target, clientInitiated)
+In connect.go, keep outgoing Packet RMS sessions in the normal FBB client-turn
+mode (`exchange(conn, url.Target, false)`) so the client sends `FF` after the
+handshake. The client-specific behavior is implemented in wl2k-go/fbb: it
+accepts the RMS prompt/challenge and sends the standard client handshake.
 
-In wl2k-go/fbb/handshake.go, accept a secure challenge without a server SID,
-consume the RMS prompt, and send the complete FBB client handshake after the
-prompt. Sending only `;PR` leaves BPQ in terminal mode and produces an
-interactive `Login [nnn]:` challenge.
+In wl2k-go/fbb/handshake.go, preserve server-side behavior but, for the
+client-initiated exchange, consume the RMS SID/challenge/prompt and always
+send the complete standard FBB client handshake after the prompt. The
+handshake includes `;FW`, the Pat SID, and `;PR` when challenged. Returning
+without sending the handshake leaves BPQ in terminal mode and produces an
+idle session with only RR acknowledgements.
 
-The resulting ARM64 binary is pat-winlink-n0jcg. Telnet and non-AX.25
-transports retain Pat's original server-led handshake behavior.
+The resulting ARM64 binary is `tools/pat-winlink-client-rms`. Telnet and
+non-AX.25 transports retain Pat's original server-led handshake behavior.
