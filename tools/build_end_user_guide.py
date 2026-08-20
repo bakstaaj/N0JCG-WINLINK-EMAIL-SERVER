@@ -119,7 +119,7 @@ def add_header_footer(doc):
         set_run(r, size=8, color=SLATE, bold=True)
         first_footer = section.first_page_footer.paragraphs[0]
         first_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.3    Page 1"), size=8, color=SLATE)
+        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.4    Page 1"), size=8, color=SLATE)
         add_bottom_rule(first_footer)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -233,7 +233,7 @@ def build():
     p.paragraph_format.space_after = Pt(26)
     set_run(p.add_run("A complete guide to the Raspberry Pi client appliance, Winlink mailbox access, DigiRig Mobile integration, and safe Packet RMS operation."), size=11, color=NAVY)
     add_table(doc, ["Release", "Publication"], [
-        ("0.1.3", "August 2026"),
+        ("0.1.4", "August 2026"),
         ("PRODUCT ROLE\nClient-side Winlink email", "AUDIENCE\nOperators and mailbox users"),
     ], [3.42, 3.42])
     doc.add_page_break()
@@ -311,6 +311,7 @@ def build():
     doc.add_paragraph("Open the webmail address and select Sign in with Winlink. Enter the user’s Winlink email address and secure-login password. The appliance validates the credentials against Winlink before opening the private local mailbox for that callsign. Webmail remains closed until Winlink CMS secure login is accepted; failed or timed-out authentication never opens a session or mailbox. After secure login succeeds, the session remains active for the browser session; refreshing the page does not sign the user out. Close the browser or select Log out to end the session.")
     add_callout(doc, "PRIVATE MAILBOX MODEL", "Mailbox access is isolated by callsign. A user cannot select another user’s mailbox from a URL or browser control.", PALE_CYAN)
     add_screenshot(doc, "webmail-inbox.png", "Figure 1. N0JCG webmail inbox and mailbox status on the client appliance.")
+    add_screenshot(doc, "webmail-signin-v0.1.4.png", "Figure 2. Current N0JCG Winlink webmail sign-in surface.")
     add_screenshot(doc, "mailbox-progress.png", "Figure 2. Webmail shows the authenticated mailbox and current synchronization state while a Packet RMS transfer is in progress.")
     add_screenshot(doc, "operator-status.png", "Figure 3. Operator status separates device detection, service readiness, RF state, and the transmit safety policy.")
     add_screenshot(doc, "operator-diagnostics.png", "Figure 4. Operator diagnostics provides a safe pre-radio checklist and a clear next action.")

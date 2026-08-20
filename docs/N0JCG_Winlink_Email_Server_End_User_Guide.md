@@ -3,7 +3,7 @@
 ## End User Guide
 
 **N0JCG Open Radio Platform**
-**Document version:** 1.3
+**Document version:** 1.4
 **Appliance host:** `PI-WINLINK`
 
 ### What this appliance does
@@ -167,6 +167,8 @@ This prevents a successful send from appearing stuck while the session closes.
 After Winlink secure login is accepted, WES opens the webmail session and continues the mailbox transfer in the background. The status message advances through the RMS connection, mailbox index, proposal, message selection, download, and finalization stages. A message such as **0 new emails were received** means the authenticated mailbox was checked and no new messages were available in that exchange. The **Refresh** control is disabled while a transfer is active so an operator cannot interrupt the current RF session.
 
 If the radio session closes after one or more messages have been received, WES records the received messages and clears the stale in-progress state. A transport failure after authentication does not expose another user’s mailbox and does not invalidate the logged-in callsign unless authentication itself has been lost.
+
+The offered-message total is fixed when the RMS proposal list is received. RMS/PAT may move those messages in FBB transfer windows (for example, 5 + 5 + 1), so the display may also show a current transfer-window count. That window count is not the mailbox total: a session offering 11 messages progresses from **0 of 11** to **11 of 11**, never 7 of 5 or 11 of 1. The remaining count is based on the fixed total and progress is capped at 100 percent.
 
 Attachments are limited to 100 KB. The interface warns when an attachment is larger than 10 KB because packet-radio transfer may be slow.
 
