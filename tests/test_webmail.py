@@ -39,6 +39,15 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('"rms_target", "last_line"', source)
         self.assertIn("The client stopped before reporting a connection attempt.", source)
 
+    def test_mailbox_progress_keeps_total_separate_from_fbb_windows(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('"window_count"', source)
+        self.assertIn('payload["offered_count"] = total_offered', source)
+        self.assertIn('payload["progress_percent"] = min(100', source)
+        self.assertIn("This is the current FBB transfer window, not the", source)
+        ui = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        self.assertIn("Current RMS transfer window", ui)
+
     def test_post_auth_pat_exit_is_not_left_in_authenticated_state(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
         self.assertIn('if returncode != 0 and job["state"] == "AUTHENTICATED":', source)

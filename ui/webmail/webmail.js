@@ -92,8 +92,10 @@
         const received = Number.isInteger(body.received) ? body.received : 0;
         const remaining = Number.isInteger(body.remaining_count) ? body.remaining_count : Math.max(total - received, 0);
         const percent = Math.max(0, Math.min(100, Number(body.progress_percent) || 0));
+        const windowHint = Number.isInteger(body.window_count) && body.window_count > 0
+          ? `<span class="sync-window-hint">Current RMS transfer window: ${body.window_count}</span>` : '';
         syncStatus.innerHTML = total > 0
-          ? `${message}<span class="sync-progress" role="status" aria-label="Mailbox download progress"><span class="sync-progress-track"><span class="sync-progress-bar" style="width:${percent}%"></span></span><span class="sync-progress-meta"><span>${received} of ${total} downloaded</span><span>${remaining} remaining</span></span></span>`
+          ? `${message}${windowHint}<span class="sync-progress" role="status" aria-label="Mailbox download progress"><span class="sync-progress-track"><span class="sync-progress-bar" style="width:${percent}%"></span></span><span class="sync-progress-meta"><span>${received} of ${total} downloaded</span><span>${remaining} remaining</span></span></span>`
           : message;
       } else {
         syncStatus.textContent = body.message || '';

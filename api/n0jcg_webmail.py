@@ -254,12 +254,19 @@ def sync_status(callsign):
         job = SYNC_JOBS.get(callsign)
         if not job:
             return {"state": "IDLE", "stage": "idle", "message": "No mailbox synchronization is running."}
-        payload = {key: job.get(key) for key in ("state", "stage", "stage_label", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count", "rms_target", "last_line")}
+        payload = {key: job.get(key) for key in ("state", "stage", "stage_label", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count", "window_count", "rms_target", "last_line")}
         payload["proposal_count"] = int(job.get("proposal_count") or 0)
-        pending = payload.get("pending_count")
+        # RMS/PAT may transfer messages in several FBB windows (for example
+        # 5 + 5 + 1).  pending_count is the immutable session total; the
+        # current window is reported separately so it cannot change 11/11
+        # progress into 5/5 and then 1/1.
+        total_offered = payload["proposal_count"] or (int(payload["pending_count"]) if payload["pending_count"] is not None else 0)
+        payload["offered_count"] = total_offered
+        payload["pending_count"] = total_offered if total_offered else payload["pending_count"]
+        pending = payload["pending_count"]
         received = int(payload.get("received") or 0)
         payload["remaining_count"] = max(int(pending) - received, 0) if pending is not None else None
-        payload["progress_percent"] = round((received / int(pending)) * 100) if pending else 0
+        payload["progress_percent"] = min(100, round((received / int(pending)) * 100)) if pending else 0
         return payload
 
 
@@ -397,7 +404,11 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["message"] = "Message selection sent; waiting for the RMS download."
                     job["auth_event"].set()
                 elif re.search(r"\d+ proposal\(s\) received", line, re.I):
-                    job["pending_count"] = int(re.search(r"(\d+) proposal", line, re.I).group(1))
+                    # This is the current FBB transfer window, not the
+                    # mailbox total. Keep the total learned from PM records.
+                    job["window_count"] = int(re.search(r"(\d+) proposal", line, re.I).group(1))
+                    if not job.get("proposal_count"):
+                        job["pending_count"] = job["window_count"]
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "downloading"
                     job["stage_label"] = "Mailbox opened"
@@ -408,7 +419,8 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["stage"] = "no_messages"
                     job["stage_label"] = "Mailbox checked"
                     job["message"] = "Mailbox synchronization complete; 0 new emails were received."
-                    job["pending_count"] = 0
+                    if not job.get("proposal_count"):
+                        job["pending_count"] = 0
                     job["auth_event"].set()
                 elif line.lstrip(">").strip() == "FQ":
                     # FQ is Pat's final exchange command. If this session
@@ -581,7 +593,7 @@ def start_pat_sync(callsign, password, restart=False):
             raise RuntimeError("Pat client is not installed on the appliance.")
         command[0] = alternate
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
-    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "proposal_count": 0, "proposal_ids": set(), "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
+    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "proposal_count": 0, "proposal_ids": set(), "window_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
     with LOCK:
         SYNC_JOBS[callsign] = job
     threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()
