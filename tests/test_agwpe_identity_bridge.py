@@ -32,6 +32,12 @@ class AGWPEIdentityBridgeTests(unittest.TestCase):
         self.assertEqual(MODULE.clean_call(rewritten.destination), "N0JCG")
         self.assertEqual(rewritten.data, b"[WL2K-5.0-B2FWIHJM$]")
 
+    def test_inbound_cms_connection_frame_rewrites_application_identity(self):
+        frame = self.frame(b"C", "N0JCG-10", "N0JCG-3", b"*** N0JCG-3 Connected to CMS")
+        rewritten = MODULE.rewrite_inbound(frame, MODULE.call_bytes("N0JCG"), MODULE.call_bytes("N0JCG-3"))
+        self.assertEqual(MODULE.clean_call(rewritten.destination), "N0JCG")
+        self.assertEqual(rewritten.data, b"*** N0JCG Connected to CMS")
+
     def test_inbound_matching_ignores_agw_padding_variation(self):
         frame = self.frame(b"D", "N0JCG-10", "N0JCG-3", b";PQ: 1234")
         frame.raw_header[7] = b"N0JCG-3   "

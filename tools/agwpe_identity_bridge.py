@@ -13,12 +13,19 @@ import asyncio
 import os
 import struct
 import sys
+import time
 from dataclasses import dataclass
 
 
 HEADER = struct.Struct("<B3s c B c B 10s 10s I I")
 CALL_SIZE = 10
 DEBUG = os.environ.get("N0JCG_AGW_DEBUG", "0") == "1"
+
+
+def timestamp() -> str:
+    now = time.time()
+    whole = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now))
+    return f"{whole}.{int((now % 1) * 1000):03d}"
 
 
 def call_bytes(value: str) -> bytes:
@@ -46,7 +53,7 @@ def trace(direction: str, frame: "Frame") -> None:
         ]
         marker_text = f" markers={','.join(markers)}" if markers else ""
         print(
-            f"AGW {direction} kind={frame.kind.decode('ascii', 'replace')} "
+            f"{timestamp()} AGW {direction} kind={frame.kind.decode('ascii', 'replace')} "
             f"from={clean_call(frame.source)} to={clean_call(frame.destination)} "
             f"bytes={len(frame.data)}{marker_text}",
             file=sys.stderr,
@@ -107,7 +114,10 @@ def rewrite_inbound(frame: Frame, mailbox: bytes, packet: bytes) -> Frame:
         # registered as N0JCG.
         packet_name = clean_call(packet).encode("ascii")
         mailbox_name = clean_call(mailbox).encode("ascii")
-        if frame.kind in {b"D", b"d"} and (
+        # Dire Wolf may deliver the CMS connection text as either an AGW
+        # connected-data (D/d) frame or a connection (C) frame. Rewrite both
+        # standard notification forms so Pat sees its mailbox identity.
+        if frame.kind in {b"C", b"c", b"D", b"d"} and (
             b"Connected to CMS" in frame.data or b"CMS via " in frame.data
         ):
             frame.data = frame.data.replace(packet_name, mailbox_name)
