@@ -482,8 +482,12 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     else:
                         job["message"] = f"Mailbox synchronization completed; the RMS closed the packet session after mailbox progress. {detail}"
                 else:
-                    detail = job.get("last_line") or "Pat stopped after secure login before the mailbox index was received."
-                    mark_post_auth_sync_failure(job, meaningful_pat_error(detail, job.get("stage", "")))
+                    offered = int(job.get("proposal_count") or 0)
+                    if offered and not int(job.get("received") or 0):
+                        mark_post_auth_sync_failure(job, f"RMS offered {offered} message(s), but the mailbox transfer did not begin. The client did not receive the RMS FC/F> mailbox summary; check the WES RF downlink and Dire Wolf receive path.")
+                    else:
+                        detail = job.get("last_line") or "Pat stopped after secure login before the mailbox index was received."
+                        mark_post_auth_sync_failure(job, meaningful_pat_error(detail, job.get("stage", "")))
             elif job["state"] not in ("AUTHENTICATED", "ERROR"):
                 if returncode == 0:
                     job["state"] = "ERROR"
