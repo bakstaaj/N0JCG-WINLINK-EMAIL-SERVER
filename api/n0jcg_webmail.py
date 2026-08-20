@@ -59,6 +59,7 @@ PAT_TIMEOUT = int(os.environ.get("N0JCG_PAT_AUTH_TIMEOUT", "300"))
 # this is not the overall mailbox-transfer timeout.
 PAT_LOGIN_WAIT = int(os.environ.get("N0JCG_PAT_LOGIN_WAIT_SECONDS", "180"))
 PAT_POST_AUTH_TIMEOUT = int(os.environ.get("N0JCG_PAT_POST_AUTH_TIMEOUT_SECONDS", "180"))
+PAT_PROGRESS_GRACE = int(os.environ.get("N0JCG_PAT_PROGRESS_GRACE_SECONDS", str(PAT_POST_AUTH_TIMEOUT)))
 # Allow the radio, AGWPE bridge, and PTT path to settle after a forced stop.
 # This is deliberately independent of the radio profile and RMS settings.
 PAT_RF_COOLDOWN_SECONDS = int(os.environ.get("N0JCG_PAT_RF_COOLDOWN_SECONDS", "10"))
@@ -66,6 +67,7 @@ PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTe
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
 PAT_AGWPE_ADDR = os.environ.get("N0JCG_PAT_AGWPE_ADDR", "localhost:8002")
+PAT_TRACE = os.environ.get("N0JCG_PAT_TRACE", "0") == "1"
 # A value greater than zero enables an operator-selected idle timeout. The
 # default is browser-session lifetime so ordinary page refreshes and long-lived
 # mailbox work do not unexpectedly sign the user out.
@@ -322,6 +324,9 @@ def _pat_sync_worker(callsign, password, config, process, job):
             line = raw_line.strip()
             if not line:
                 continue
+            if PAT_TRACE:
+                elapsed_ms = int((time.monotonic() - job["monotonic_started"]) * 1000)
+                print(f"PAT +{elapsed_ms}ms line: {line[-500:]}", flush=True)
             with LOCK:
                 job["updated_at"] = time.time()
                 job["last_line"] = line[-500:]
@@ -352,12 +357,14 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["message"] = "Mailbox index requested; waiting for RMS message records."
                     job["auth_event"].set()
                 elif re.match(r"^>?PM(?:\s|:)|^;PM", line, re.I):
+                    job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "mailbox_index"
                     job["stage_label"] = "Mailbox proposal received"
                     job["message"] = "RMS mailbox proposal received; accepting the mailbox transfer."
                     job["auth_event"].set()
                 elif line.startswith(">FC EM"):
+                    job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
                     job["outgoing_count"] = int(job.get("outgoing_count") or 0) + 1
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "uploading"
@@ -365,12 +372,14 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["message"] = f"Mailbox authenticated; sending {job['outgoing_count']} queued message(s)."
                     job["auth_event"].set()
                 elif re.match(r"^>?F>(?:\s|$)|^>?FC(?:\s|$)", line, re.I):
+                    job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "mailbox_records"
                     job["stage_label"] = "Mailbox records received"
                     job["message"] = "RMS mailbox records received; waiting for the mailbox summary (F>)."
                     job["auth_event"].set()
                 elif line.startswith(">FS"):
+                    job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "mailbox_selection"
                     job["stage_label"] = "Message selection sent"
@@ -406,6 +415,7 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["message"] = "Mailbox synchronization complete; 0 new emails were received and the packet session closed cleanly."
                     job["auth_event"].set()
                 elif re.search(r"Receiving \[", line, re.I):
+                    job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
                     job["received"] = int(job.get("received") or 0) + 1
                     job["state"] = "AUTHENTICATED"
                     if job.get("pending_count") and job["received"] >= job["pending_count"]:
@@ -552,7 +562,7 @@ def start_pat_sync(callsign, password, restart=False):
             raise RuntimeError("Pat client is not installed on the appliance.")
         command[0] = alternate
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
-    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
+    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
     with LOCK:
         SYNC_JOBS[callsign] = job
     threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()
