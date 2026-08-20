@@ -254,7 +254,13 @@ def sync_status(callsign):
         job = SYNC_JOBS.get(callsign)
         if not job:
             return {"state": "IDLE", "stage": "idle", "message": "No mailbox synchronization is running."}
-        return {key: job.get(key) for key in ("state", "stage", "stage_label", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count", "rms_target", "last_line")}
+        payload = {key: job.get(key) for key in ("state", "stage", "stage_label", "message", "started_at", "updated_at", "received", "sent", "pending_count", "outgoing_count", "rms_target", "last_line")}
+        payload["proposal_count"] = int(job.get("proposal_count") or 0)
+        pending = payload.get("pending_count")
+        received = int(payload.get("received") or 0)
+        payload["remaining_count"] = max(int(pending) - received, 0) if pending is not None else None
+        payload["progress_percent"] = round((received / int(pending)) * 100) if pending else 0
+        return payload
 
 
 def terminate_pat_process(process):
@@ -358,10 +364,15 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     job["auth_event"].set()
                 elif re.match(r"^>?PM(?:\s|:)|^;PM", line, re.I):
                     job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
+                    proposal = re.match(r"^(?:;PM:|>?PM:?)\s+\S+\s+([A-Z0-9]+)\b", line, re.I)
+                    if proposal:
+                        job.setdefault("proposal_ids", set()).add(proposal.group(1).upper())
+                        job["proposal_count"] = len(job["proposal_ids"])
+                        job["pending_count"] = max(int(job.get("pending_count") or 0), job["proposal_count"])
+                        job["message"] = f"Mailbox proposal received; {job['proposal_count']} new message(s) offered, {job['proposal_count']} remaining."
                     job["state"] = "AUTHENTICATED"
                     job["stage"] = "mailbox_index"
                     job["stage_label"] = "Mailbox proposal received"
-                    job["message"] = "RMS mailbox proposal received; accepting the mailbox transfer."
                     job["auth_event"].set()
                 elif line.startswith(">FC EM"):
                     job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
@@ -417,6 +428,7 @@ def _pat_sync_worker(callsign, password, config, process, job):
                 elif re.search(r"Receiving \[", line, re.I):
                     job["post_auth_deadline"] = time.time() + PAT_PROGRESS_GRACE
                     job["received"] = int(job.get("received") or 0) + 1
+                    remaining = max(int(job.get("pending_count") or 0) - job["received"], 0) if job.get("pending_count") is not None else None
                     job["state"] = "AUTHENTICATED"
                     if job.get("pending_count") and job["received"] >= job["pending_count"]:
                         job["stage"] = "finalizing"
@@ -425,7 +437,10 @@ def _pat_sync_worker(callsign, password, config, process, job):
                     else:
                         job["stage"] = "downloading"
                         job["stage_label"] = "Downloading messages"
-                        job["message"] = f"Mailbox opened; received {job['received']} message(s)."
+                        if remaining is None:
+                            job["message"] = f"Mailbox opened; received {job['received']} message(s)."
+                        else:
+                            job["message"] = f"Downloading messages; received {job['received']} of {job['pending_count']}, {remaining} remaining."
                     job["auth_event"].set()
                 elif re.search(r"\b(?:DISC|UA)\b|Disconnected|connection lost", line, re.I) and job.get("received", 0):
                     job["state"] = "AUTHENTICATED"
@@ -562,7 +577,7 @@ def start_pat_sync(callsign, password, restart=False):
             raise RuntimeError("Pat client is not installed on the appliance.")
         command[0] = alternate
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
-    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
+    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "proposal_count": 0, "proposal_ids": set(), "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
     with LOCK:
         SYNC_JOBS[callsign] = job
     threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()

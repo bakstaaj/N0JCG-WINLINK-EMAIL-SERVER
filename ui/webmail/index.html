@@ -43,6 +43,10 @@
     .password-toggle { display:flex !important; grid-template-columns:none; align-items:center; gap:var(--n0-space-2); font-weight:400 !important; }
     .password-toggle input { width:auto !important; }
     .auth-message { min-height:1.5em; margin:0; color:var(--n0-color-warning); }
+    .sync-progress { display:grid; gap:.35rem; margin-top:.5rem; }
+    .sync-progress-track { height:.55rem; overflow:hidden; border-radius:999px; background:#dfe7ef; }
+    .sync-progress-bar { height:100%; border-radius:inherit; background:var(--n0-color-accent,#1268c4); transition:width .3s ease; }
+    .sync-progress-meta { display:flex; justify-content:space-between; gap:1rem; font-size:.82rem; color:var(--n0-color-muted,#5c6672); }
     .signature-view { display:grid; gap:var(--n0-space-4); }
     .signature-view textarea { width:100%; min-height:150px; padding:11px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; resize:vertical; }
     .mail-panel > [hidden] { display:none !important; }
@@ -136,6 +140,6 @@
     </section>
   </main>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> Client-side appliance, not an RMS gateway</footer>
-  <script src="webmail.js?v=20260819-progressive-sync4"></script>
+  <script src="webmail.js?v=20260820-progressive-sync5"></script>
 </body>
 </html>

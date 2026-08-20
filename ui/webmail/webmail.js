@@ -81,12 +81,23 @@
       }
       if (mailboxBadge && currentCallsign) {
         mailboxBadge.className = `status-badge ${body.state === 'AUTHENTICATED' ? 'status-ready' : 'status-unknown'}`;
-        const pendingLabel = body.stage === 'complete' ? 'downloaded' : 'downloading';
+        const pendingLabel = body.stage === 'complete' ? 'downloaded' : 'offered';
         const pending = Number.isInteger(body.pending_count) ? ` · ${body.pending_count} message${body.pending_count === 1 ? '' : 's'} ${pendingLabel}` : (body.outgoing_count ? ` · ${body.outgoing_count} message${body.outgoing_count === 1 ? '' : 's'} ${body.stage === 'complete' ? 'sent' : 'sending'}` : '');
         mailboxBadge.textContent = `${body.state === 'AUTHENTICATED' ? '✓ Mailbox: Connected' : '… Mailbox: Connecting'} - ${currentCallsign}${pending}`;
       }
       syncStatus.hidden = !(active || syncFailedAfterLogin);
-      syncStatus.textContent = (active || syncFailedAfterLogin) ? (body.message || 'Synchronizing the Winlink mailbox…') : (body.message || '');
+      if (active || syncFailedAfterLogin) {
+        const message = escapeHtml(body.message || 'Synchronizing the Winlink mailbox…');
+        const total = Number.isInteger(body.pending_count) ? body.pending_count : 0;
+        const received = Number.isInteger(body.received) ? body.received : 0;
+        const remaining = Number.isInteger(body.remaining_count) ? body.remaining_count : Math.max(total - received, 0);
+        const percent = Math.max(0, Math.min(100, Number(body.progress_percent) || 0));
+        syncStatus.innerHTML = total > 0
+          ? `${message}<span class="sync-progress" role="status" aria-label="Mailbox download progress"><span class="sync-progress-track"><span class="sync-progress-bar" style="width:${percent}%"></span></span><span class="sync-progress-meta"><span>${received} of ${total} downloaded</span><span>${remaining} remaining</span></span></span>`
+          : message;
+      } else {
+        syncStatus.textContent = body.message || '';
+      }
       if (active) {
         window.clearTimeout(syncTimer);
         syncTimer = window.setTimeout(pollMailboxSync, 1000);
