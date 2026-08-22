@@ -3,7 +3,7 @@
 ## End User Guide
 
 **N0JCG Open Radio Platform**
-**Document version:** 1.4
+**Document version:** 1.5
 **Appliance host:** `PI-WINLINK`
 
 ### What this appliance does

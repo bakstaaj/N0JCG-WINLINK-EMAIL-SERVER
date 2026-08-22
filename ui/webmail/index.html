@@ -38,11 +38,26 @@
     .auth-form { display:grid; gap:var(--n0-space-4); }
     .auth-form label { display:grid; gap:var(--n0-space-2); color:var(--n0-color-text-muted); font-size:.85rem; font-weight:700; }
     .auth-form input:not([type="checkbox"]) { width:100%; padding:11px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
+    .callsign-input { display:flex; align-items:center; }
+    .callsign-input input { border-radius:var(--n0-radius-sm) 0 0 var(--n0-radius-sm) !important; }
+    .callsign-domain { padding:11px 12px; border:1px solid var(--n0-color-border); border-left:0; border-radius:0 var(--n0-radius-sm) var(--n0-radius-sm) 0; color:var(--n0-color-text-muted); background:#f8fafc; font-weight:600; white-space:nowrap; }
     .auth-form .consent { display:flex; grid-template-columns:none; align-items:start; gap:var(--n0-space-2); font-weight:400; }
     .auth-form .consent input { margin-top:.3rem; }
     .password-toggle { display:flex !important; grid-template-columns:none; align-items:center; gap:var(--n0-space-2); font-weight:400 !important; }
     .password-toggle input { width:auto !important; }
     .auth-message { min-height:1.5em; margin:0; color:var(--n0-color-warning); }
+    .sync-actions { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; }
+    .sync-debug-button { border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); padding:7px 10px; color:var(--n0-color-navy); background:var(--n0-color-white); font:inherit; font-size:.82rem; font-weight:700; cursor:pointer; }
+    .sync-debug-button:hover { color:var(--n0-color-white); background:var(--n0-color-blue); }
+    .sync-debug-dialog { width:min(900px,calc(100vw - 2rem)); max-height:min(760px,calc(100vh - 2rem)); border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-md); padding:0; color:var(--n0-color-text); }
+    .sync-debug-dialog::backdrop { background:rgb(5 20 38 / 55%); }
+    .sync-debug-header { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:1rem 1.25rem; border-bottom:1px solid var(--n0-color-border); }
+    .sync-debug-header h3 { margin:0; }
+    .sync-debug-close { border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); padding:6px 10px; background:var(--n0-color-white); cursor:pointer; }
+    .sync-debug-summary { display:flex; flex-wrap:wrap; gap:.5rem 1rem; padding:.8rem 1.25rem; background:#f8fafc; color:var(--n0-color-text-muted); font-size:.86rem; }
+    .sync-debug-events { display:grid; gap:.35rem; max-height:520px; overflow:auto; padding:1rem 1.25rem; background:#0b1724; color:#dcecff; font: .78rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .sync-debug-event { display:grid; grid-template-columns:11rem 7rem minmax(0,1fr); gap:.6rem; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .sync-debug-event time, .sync-debug-event strong { color:#8ccfff; }
     .sync-progress { display:grid; gap:.35rem; margin-top:.5rem; }
     .sync-progress-track { height:.55rem; overflow:hidden; border-radius:999px; background:#dfe7ef; }
     .sync-progress-bar { height:100%; border-radius:inherit; background:var(--n0-color-accent,#1268c4); transition:width .3s ease; }
@@ -106,8 +121,8 @@
       <div class="status-badge status-unavailable" role="status"><span aria-hidden="true">!</span> Mailbox: Not connected</div>
     </section>
     <section id="auth-gate" class="card auth-gate" aria-labelledby="auth-title">
-      <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in with Winlink</h2><p>Use your Winlink radio email address and secure-login password. A first login initializes an isolated Winlink mailbox for that callsign.</p></div>
-      <form id="login-form" class="auth-form"><label>Winlink email address<input name="email" type="email" autocomplete="username" placeholder="YOURCALL@winlink.org" required></label><label>Winlink password<input id="login-password" name="password" type="password" autocomplete="current-password" required></label><label class="password-toggle"><input id="show-password" type="checkbox"> Show password</label><button class="button" type="submit">Sign in</button><p class="auth-message" role="status"></p></form>
+      <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in with Winlink</h2><p>Use your Winlink callsign and secure-login password. The Winlink mailbox domain is added automatically. A first login initializes an isolated mailbox for that callsign.</p></div>
+      <form id="login-form" class="auth-form"><label>Winlink callsign<div class="callsign-input"><input name="email" type="text" inputmode="text" autocapitalize="characters" autocomplete="username" placeholder="YOURCALL" required><span class="callsign-domain" aria-hidden="true">@winlink.org</span></div></label><label>Winlink password<input id="login-password" name="password" type="password" autocomplete="current-password" required></label><label class="password-toggle"><input id="show-password" type="checkbox"> Show password</label><button class="button" type="submit">Sign in</button><p class="auth-message" role="status"></p></form>
       <p class="muted">No separate webmail registration is required. Radio email ownership is proven only after the Winlink client completes a successful CMS or Packet transaction. Credentials are not displayed back in the UI.</p>
     </section>
     <section id="mail-workspace" class="mail-layout" aria-label="Webmail workspace" hidden>
@@ -122,7 +137,7 @@
       </nav>
       <section class="card mail-panel" aria-live="polite">
         <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="refresh">Refresh</button></div></div>
-        <p id="mail-sync-status" class="auth-message" role="status" hidden></p>
+        <div class="sync-actions"><p id="mail-sync-status" class="auth-message" role="status" hidden></p><button id="sync-debug-button" class="sync-debug-button" type="button" hidden>Debug details</button></div>
         <div id="folder-view" class="mail-empty"><strong>No mailbox connection</strong><p>The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.</p></div>
         <form id="signature-view" class="signature-view" hidden><h3>Email signature</h3><p class="muted">This signature is saved separately for your authenticated Winlink callsign and added to new messages.</p><textarea name="signature" maxlength="2000" placeholder="73,\nYOURCALL"></textarea><p class="auth-message" role="status"></p><div class="compose-actions"><button type="submit">Save signature</button><button type="button" class="secondary" data-action="cancel-signature">Cancel</button></div></form>
         <section id="folder-manager" class="folder-manager" hidden><h3>Manage folders</h3><p class="muted">Create folders for this Winlink account. Built-in mailbox folders cannot be deleted.</p><form id="folder-form"><input name="name" maxlength="40" placeholder="Folder name" required><button type="submit">Create folder</button></form><p id="folder-message" class="auth-message" role="status"></p><div id="custom-folder-list"></div><button type="button" class="secondary" data-action="cancel-folders">Done</button></section>
@@ -139,6 +154,7 @@
       </section>
     </section>
   </main>
+  <dialog id="sync-debug-dialog" class="sync-debug-dialog" aria-labelledby="sync-debug-title"><div class="sync-debug-header"><h3 id="sync-debug-title">Packet RMS session details</h3><button id="sync-debug-close" class="sync-debug-close" type="button">Close</button></div><div id="sync-debug-summary" class="sync-debug-summary">Waiting for session data…</div><div id="sync-debug-events" class="sync-debug-events" role="log" aria-live="polite">No events collected yet.</div></dialog>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> Client-side appliance, not an RMS gateway</footer>
   <script src="webmail.js?v=20260820-progressive-sync5"></script>
 </body>

@@ -17,6 +17,7 @@ ReadWritePaths=/var/lib/n0jcg-winlink-webmail
 ReadWritePaths=/home/@APP_USER@/.local/state/pat
 Environment=N0JCG_WEBMAIL_STATE_DIR=/var/lib/n0jcg-winlink-webmail
 EnvironmentFile=-/var/lib/n0jcg-winlink-webmail/radio-profile.conf
+Environment=N0JCG_PAT_TRACE=1
 
 [Install]
 WantedBy=multi-user.target

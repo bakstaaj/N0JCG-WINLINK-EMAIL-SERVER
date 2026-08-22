@@ -45,3 +45,5 @@ h1, h2, p { margin-top: 0; } h1 { margin-bottom: var(--n0-space-2); color: var(-
 .gateway-row small { color: var(--n0-color-text-muted); }
 .gateway-distance { color: var(--n0-color-text-muted); white-space: nowrap; font-size: .88rem; }
 @media (max-width: 800px) { .gateway-location-form { grid-template-columns: 1fr 1fr; } .gateway-row { grid-template-columns: 1fr auto; } .gateway-row .choose-gateway { grid-column: 1 / -1; } }
+.calibration-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.75rem;margin:1rem 0}.calibration-metrics div{padding:.75rem;background:#f8fafc;border-radius:.4rem}.calibration-metrics span{display:block;font-size:.78rem;color:#52657d}.calibration-metrics strong{font-size:1.4rem}.calibration-quality--quiet{color:#a56a00}.calibration-quality--usable{color:#11683a}.calibration-quality--hot{color:#a52323}.calibration-log{max-height:12rem;overflow:auto;padding:.75rem;background:#0b1724;color:#dcecff;border-radius:.4rem;font-size:.72rem;white-space:pre-wrap}
+.calibration-error{color:#a52323}

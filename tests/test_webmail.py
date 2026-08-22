@@ -139,15 +139,18 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("syncFailedAfterLogin", script)
         self.assertIn("syncStatus.hidden = !(active || syncFailedAfterLogin)", script)
 
-    def test_refresh_is_disabled_during_mailbox_transfer(self):
+    def test_refresh_remains_available_during_mailbox_transfer(self):
         script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
         self.assertIn("function setRefreshAvailability(transferActive)", script)
-        self.assertIn("button.disabled = Boolean(transferActive)", script)
+        self.assertIn("button.disabled = false", script)
         self.assertIn("setRefreshAvailability(active)", script)
-        self.assertIn("Sync in progress…", script)
+        self.assertIn("body: JSON.stringify({ restart: true })", script)
 
     def test_normalize_account_returns_callsign(self):
         email, callsign = MODULE.normalize_account("n0jcg@winlink.org")
+        self.assertEqual(email, "N0JCG@WINLINK.ORG")
+        self.assertEqual(callsign, "N0JCG")
+        email, callsign = MODULE.normalize_account("n0jcg")
         self.assertEqual(email, "N0JCG@WINLINK.ORG")
         self.assertEqual(callsign, "N0JCG")
 

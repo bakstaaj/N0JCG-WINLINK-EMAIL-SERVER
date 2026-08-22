@@ -8,6 +8,7 @@ logs/
 docs/rendered-guide/
 docs/rendered-guide-v2/
 docs/rendered-guide-v3/
+docs/rendered-guide-*/
 docs/pdf-v2/
 docs/assets/operator-console.png
 docs/assets/manage-folders.png

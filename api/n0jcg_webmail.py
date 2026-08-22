@@ -12,12 +12,15 @@ never treated as mailbox ownership without Pat CMS evidence.
 """
 
 import base64
+import atexit
 import http.cookies
 import json
+import math
 import os
 import re
 import secrets
 import socket
+import struct
 import shutil
 import sqlite3
 import subprocess
@@ -93,9 +96,13 @@ def json_bytes(value):
 
 def normalize_account(value):
     account = str(value or "").strip().upper()
+    # The UI accepts the operator's callsign alone; Winlink's mailbox domain
+    # is implicit. Continue accepting a complete address for API compatibility.
+    if "@" not in account:
+        account = f"{account}@WINLINK.ORG"
     match = EMAIL_RE.fullmatch(account)
     if not match:
-        raise ValueError("use a Winlink address such as YOURCALL@winlink.org")
+        raise ValueError("enter a valid Winlink callsign")
     return account, match.group(1)
 
 
@@ -270,6 +277,45 @@ def sync_status(callsign):
         return payload
 
 
+def record_sync_event(job, source, message):
+    """Keep a bounded, redacted timeline for the operator debug view."""
+    if not job or not message:
+        return
+    text = re.sub(r"(?i)(password|passcode|secure-login-password)\s*[:=]\s*\S+", r"\1=[redacted]", str(message).strip())
+    event = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "source": str(source), "message": text[-600:]}
+    with LOCK:
+        events = job.setdefault("events", [])
+        events.append(event)
+        del events[:-200]
+
+
+def _journal_events(unit, source, limit=80):
+    try:
+        result = subprocess.run(["journalctl", "-u", unit, "-n", str(limit), "--no-pager", "-o", "short-iso"], capture_output=True, text=True, timeout=4)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if result.returncode != 0:
+        return []
+    events = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line:
+            events.append({"at": line[:25], "source": source, "message": line[26:].strip() or line})
+    return events
+
+
+def sync_debug(callsign):
+    with LOCK:
+        job = SYNC_JOBS.get(callsign)
+        pat_events = list(job.get("events", [])) if job else []
+        snapshot = sync_status(callsign)
+    devices = {"audio": Path("/dev/snd").exists(), "serial": Path("/dev/digirig-serial").exists(), "ptt": Path("/dev/digirig-ptt").exists()}
+    events = pat_events + _journal_events("n0jcg-direwolf.service", "Dire Wolf") + _journal_events("n0jcg-agwpe-identity-bridge.service", "AGW bridge")
+    events.append({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "source": "DigiRig", "message": f"audio={'present' if devices['audio'] else 'missing'}, serial={'present' if devices['serial'] else 'missing'}, PTT={'present' if devices['ptt'] else 'missing'}"})
+    events.sort(key=lambda item: item.get("at", ""))
+    return {"sync": snapshot, "events": events[-300:], "services": {"Dire Wolf": service_state("n0jcg-direwolf.service"), "AGW bridge": service_state("n0jcg-agwpe-identity-bridge.service"), "webmail": service_state("n0jcg-webmail.service")}, "devices": devices, "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+
+
 def terminate_pat_process(process):
     """Stop Pat promptly and release its AGW/PTT connection."""
     if not process or process.poll() is not None:
@@ -343,6 +389,7 @@ def _pat_sync_worker(callsign, password, config, process, job):
             with LOCK:
                 job["updated_at"] = time.time()
                 job["last_line"] = line[-500:]
+                record_sync_event(job, "Pat/RMS", line)
                 if "Connected to CMS" in line:
                     job["stage"] = "username_sent"
                     job["stage_label"] = "Username sent"
@@ -593,9 +640,10 @@ def start_pat_sync(callsign, password, restart=False):
             raise RuntimeError("Pat client is not installed on the appliance.")
         command[0] = alternate
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
-    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "proposal_count": 0, "proposal_ids": set(), "window_count": None, "outgoing_count": 0, "last_line": "", "auth_event": threading.Event(), "error_event": threading.Event()}
+    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "proposal_count": 0, "proposal_ids": set(), "window_count": None, "outgoing_count": 0, "last_line": "", "events": [], "auth_event": threading.Event(), "error_event": threading.Event()}
     with LOCK:
         SYNC_JOBS[callsign] = job
+    record_sync_event(job, "Pat/RMS", f"Session started; target={profile_target or 'configured target'}")
     threading.Thread(target=_pat_sync_worker, args=(callsign, password, config, process, job), daemon=True, name=f"pat-sync-{callsign}").start()
     threading.Thread(target=_pat_sync_watchdog, args=(job,), daemon=True, name=f"pat-watchdog-{callsign}").start()
     return job
@@ -745,6 +793,240 @@ def service_state(name):
         return result.stdout.strip() or "unknown"
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return "unknown"
+
+
+CALIBRATION_LOCK = threading.Lock()
+CALIBRATION_STOP = threading.Event()
+CALIBRATION_PROCESS = None
+CALIBRATION_THREAD = None
+CALIBRATION_STATE = {
+    "active": False,
+    "started_at": None,
+    "latest_level": None,
+    "average_level": None,
+    "rms_dbfs": None,
+    "peak_dbfs": None,
+    "sample_count": 0,
+    "error": None,
+}
+AUTOGAIN_LOCK = threading.RLock()
+AUTOGAIN_PROCESS = None
+AUTOGAIN_STATE = {"active": False, "started_at": None, "message": "Ready to run.", "output": [], "last_attempt": None, "result": None}
+AUTOGAIN_GAIN_RE = re.compile(r"(?:gain(?:=| to )|final gain )(?P<gain>\d+)/35")
+
+
+def autogain_status():
+    global AUTOGAIN_PROCESS
+    with AUTOGAIN_LOCK:
+        process = AUTOGAIN_PROCESS
+        state = dict(AUTOGAIN_STATE)
+    if process is not None and process.poll() is not None:
+        with AUTOGAIN_LOCK:
+            AUTOGAIN_STATE["active"] = False
+            AUTOGAIN_STATE["message"] = AUTOGAIN_STATE.get("last_attempt") or f"Calibration finished (exit {process.returncode})"
+            AUTOGAIN_PROCESS = None
+            state = dict(AUTOGAIN_STATE)
+    # Keep the idle response meaningful for older cached operator pages too.
+    # Those pages display state.message when their polling callback runs; the
+    # former "Not armed"/"Not running" text made a healthy control look dead.
+    if not state.get("active") and state.get("message") in ("Not armed.", "Not running"):
+        state["message"] = "Ready to run."
+    state["gain"] = None
+    for line in reversed(state.get("output") or []):
+        match = AUTOGAIN_GAIN_RE.search(line)
+        if match:
+            state["gain"] = int(match.group("gain"))
+            break
+    return state
+
+
+def start_autogain():
+    global AUTOGAIN_PROCESS
+    with AUTOGAIN_LOCK:
+        if AUTOGAIN_PROCESS is not None and AUTOGAIN_PROCESS.poll() is None:
+            return autogain_status()
+        process = subprocess.Popen(
+            ["/usr/local/sbin/n0jcg-wes-direwolf-autogain"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+        )
+        AUTOGAIN_PROCESS = process
+        AUTOGAIN_STATE.update({"active": True, "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": "Waiting for operator RMS test", "output": [], "last_attempt": None, "result": None})
+        threading.Thread(target=_autogain_output_worker, args=(process,), daemon=True, name="wes-autogain-output").start()
+    return autogain_status()
+
+
+def _autogain_output_worker(process):
+    for line in process.stdout or ():
+        with AUTOGAIN_LOCK:
+            clean = line.rstrip()
+            AUTOGAIN_STATE["output"] = (AUTOGAIN_STATE.get("output") or [])[-99:] + [clean]
+            if clean.startswith("Attempt "):
+                AUTOGAIN_STATE["last_attempt"] = clean
+            if clean.startswith(("Calibration complete:", "Calibration incomplete", "S/N stopped", "Calibration error")):
+                AUTOGAIN_STATE["result"] = clean
+            AUTOGAIN_STATE["message"] = clean or AUTOGAIN_STATE.get("message", "")
+
+
+def stop_autogain():
+    global AUTOGAIN_PROCESS
+    with AUTOGAIN_LOCK:
+        process = AUTOGAIN_PROCESS
+        AUTOGAIN_PROCESS = None
+        AUTOGAIN_STATE["active"] = False
+        AUTOGAIN_STATE["message"] = "Stopped by operator"
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+    return autogain_status()
+
+
+def _restart_direwolf(action):
+    result = subprocess.run(["sudo", "-n", "systemctl", action, "n0jcg-direwolf.service"], capture_output=True, text=True, timeout=8)
+    if result.returncode:
+        detail = (result.stderr or result.stdout or "unknown systemctl error").strip()
+        raise RuntimeError(f"Could not {action} Dire Wolf: {detail}")
+
+
+def _audio_calibration_worker():
+    global CALIBRATION_PROCESS
+    try:
+        process = subprocess.Popen(
+            ["arecord", "-D", "plughw:Device,0", "-f", "S16_LE", "-r", "44100", "-c", "1", "-t", "raw"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        with CALIBRATION_LOCK:
+            CALIBRATION_PROCESS = process
+        total_samples = 0
+        window_rms = []
+        while not CALIBRATION_STOP.is_set():
+            raw = process.stdout.read(1024)
+            if not raw:
+                break
+            if len(raw) % 2:
+                raw = raw[:-1]
+            values = struct.unpack(f"<{len(raw) // 2}h", raw)
+            if not values:
+                continue
+            rms = math.sqrt(sum(value * value for value in values) / len(values))
+            peak = max(abs(value) for value in values)
+            total_samples += len(values)
+            window_rms.append(rms)
+            window_rms = window_rms[-5:]
+            with CALIBRATION_LOCK:
+                CALIBRATION_STATE.update({
+                    "latest_level": round(100 * peak / 32768),
+                    "average_level": round(100 * sum(window_rms) / len(window_rms) / 32768, 1),
+                    "rms_dbfs": round(20 * math.log10(max(rms, 1) / 32768), 1),
+                    "peak_dbfs": round(20 * math.log10(max(peak, 1) / 32768), 1),
+                    "sample_count": total_samples,
+                })
+    except (OSError, subprocess.SubprocessError, ValueError, struct.error) as exc:
+        with CALIBRATION_LOCK:
+            CALIBRATION_STATE["error"] = str(exc)
+    finally:
+        with CALIBRATION_LOCK:
+            process = CALIBRATION_PROCESS
+            CALIBRATION_PROCESS = None
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+
+def stop_audio_calibration():
+    global CALIBRATION_THREAD
+    with CALIBRATION_LOCK:
+        was_active = bool(CALIBRATION_STATE["active"])
+        CALIBRATION_STATE["active"] = False
+    CALIBRATION_STOP.set()
+    thread = CALIBRATION_THREAD
+    if thread and thread.is_alive():
+        thread.join(timeout=3)
+    CALIBRATION_THREAD = None
+    if was_active:
+        _restart_direwolf("start")
+
+
+def start_audio_calibration():
+    global CALIBRATION_THREAD
+    stop_audio_calibration()
+    _restart_direwolf("stop")
+    CALIBRATION_STOP.clear()
+    with CALIBRATION_LOCK:
+        CALIBRATION_STATE.update({"active": True, "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "latest_level": None, "average_level": None, "rms_dbfs": None, "peak_dbfs": None, "sample_count": 0, "error": None})
+    CALIBRATION_THREAD = threading.Thread(target=_audio_calibration_worker, daemon=True, name="audio-calibration")
+    CALIBRATION_THREAD.start()
+
+
+atexit.register(stop_audio_calibration)
+
+
+def audio_calibration_status():
+    """Observe Dire Wolf without opening a second audio device or transmitter."""
+    with CALIBRATION_LOCK:
+        state = dict(CALIBRATION_STATE)
+    lines = []
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", "n0jcg-direwolf.service", "-n", "160", "--no-pager", "-o", "short-iso"],
+            capture_output=True, text=True, timeout=4,
+        )
+        if result.returncode == 0:
+            lines = result.stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    levels = [int(match.group(1)) for line in lines if (match := re.search(r"audio level = (\d+)", line))]
+    frames = [line for line in lines if re.search(r"\] .*\((?:I|RR|UA|SABM|DISC)", line)]
+    if state["active"] and state["sample_count"]:
+        rms_dbfs = state["rms_dbfs"]
+        peak_dbfs = state["peak_dbfs"]
+        # Keep a safety margin from both clipping and the noise floor.  The
+        # former -3 dBFS/-45 dBFS boundaries made the green band too wide;
+        # readings at either edge produced unreliable packet decoding.
+        if peak_dbfs is not None and peak_dbfs >= -6:
+            quality = "too hot / clipping"
+            guidance = "Noise is clipping the DigiRig input. Lower the WES radio volume, then wait for a stable reading."
+        elif rms_dbfs is not None and rms_dbfs <= -40:
+            quality = "too quiet"
+            guidance = "Noise is very low. Raise the WES radio volume one step at a time until the noise is visible but not clipping."
+        else:
+            quality = "usable noise floor"
+            guidance = "Noise floor is usable. Stop the test, restore Dire Wolf, then send a short carrier and voice check."
+        return {
+            "active": True,
+            "started_at": state["started_at"],
+            "receive_only": True,
+            "audio": {"latest_level": state["latest_level"], "average_level": state["average_level"], "rms_dbfs": rms_dbfs, "peak_dbfs": peak_dbfs, "sample_count": state["sample_count"], "quality": quality, "guidance": guidance},
+            "decoded_events": 0,
+            "recent_events": [],
+            "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+    guidance = (
+        "Adjust the physical radio volume. Aim for a stable mid-range level without clipping."
+        if levels else
+        "Waiting for an incoming RF/audio burst. Dire Wolf reports audio levels when it detects activity; transmit a brief test carrier or wait for a packet while adjusting volume."
+    )
+    return {
+        "active": bool(state["active"]),
+        "started_at": state["started_at"],
+        "receive_only": True,
+        "audio": {
+            "latest_level": levels[-1] if levels else None,
+            "average_level": round(sum(levels[-10:]) / min(10, len(levels)), 1) if levels else None,
+            "sample_count": len(levels),
+            "rms_dbfs": None,
+            "peak_dbfs": None,
+            "guidance": guidance,
+        },
+        "decoded_events": len(frames),
+        "recent_events": lines[-30:],
+        "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
 
 
 def operator_diagnostics():
@@ -977,7 +1259,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not session:
                     self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
                     return
-                job = start_pat_sync(session["callsign"], session["password"])
+                restart = bool(data.get("restart")) if isinstance(data, dict) else False
+                job = start_pat_sync(session["callsign"], session["password"], restart=restart)
                 self.send_json(HTTPStatus.ACCEPTED, {"state": "SYNCING", "sync": sync_status(session["callsign"])})
                 return
             if self.path == "/api/v1/auth/logout":
@@ -1019,6 +1302,20 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/v1/operator/radio-profile":
                 payload = apply_radio_profile(data)
                 self.send_json(HTTPStatus.OK, {"saved": True, "profile": payload})
+                return
+            if self.path == "/api/v1/operator/audio-calibration":
+                enabled = bool(data.get("enabled"))
+                try:
+                    start_audio_calibration() if enabled else stop_audio_calibration()
+                except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "error": str(exc)})
+                    return
+                self.send_json(HTTPStatus.OK, {"ok": True, "message": "Live receive-only audio meter started." if enabled else "Receive-only audio calibration stopped.", "calibration": audio_calibration_status()})
+                return
+            if self.path == "/api/v1/operator/audio-autogain":
+                enabled = bool(data.get("enabled"))
+                state = start_autogain() if enabled else stop_autogain()
+                self.send_json(HTTPStatus.OK, {"ok": True, "message": "Automatic RMS receive calibration armed." if enabled else "Automatic RMS receive calibration stopped.", "autogain": state})
                 return
             if self.path == "/api/v1/templates/render":
                 session = session_from(self)
@@ -1191,6 +1488,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/v1/operator/radio-profile":
             self.send_json(HTTPStatus.OK, {"profile": radio_profile()})
             return
+        if self.path == "/api/v1/operator/audio-calibration":
+            self.send_json(HTTPStatus.OK, audio_calibration_status())
+            return
+        if self.path == "/api/v1/operator/audio-autogain":
+            self.send_json(HTTPStatus.OK, autogain_status())
+            return
         if self.path == "/api/v1/auth/session":
             if not session:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"authenticated": False})
@@ -1211,6 +1514,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
             else:
                 self.send_json(HTTPStatus.OK, sync_status(session["callsign"]))
+            return
+        if self.path == "/api/v1/mail/sync/debug":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+            else:
+                self.send_json(HTTPStatus.OK, sync_debug(session["callsign"]))
             return
         if self.path == "/api/v1/mail/settings":
             if not session:

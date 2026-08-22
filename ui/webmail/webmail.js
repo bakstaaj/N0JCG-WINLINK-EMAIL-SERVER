@@ -13,12 +13,17 @@
   const mailUser = document.getElementById('mail-user');
   const logoutButton = document.getElementById('logout-button');
   const syncStatus = document.getElementById('mail-sync-status');
+  const syncDebugButton = document.getElementById('sync-debug-button');
+  const syncDebugDialog = document.getElementById('sync-debug-dialog');
+  const syncDebugSummary = document.getElementById('sync-debug-summary');
+  const syncDebugEvents = document.getElementById('sync-debug-events');
   const mailboxBadge = document.querySelector('.status-badge');
   let sessionTimer;
   let syncTimer;
   let authProgressTimer;
   let queueTimer;
   let autoSyncTimer;
+  let syncDebugTimer;
   let redirectingToLogin = false;
   let currentCallsign = '';
   const nativeFetch = window.fetch.bind(window);
@@ -36,6 +41,7 @@
     window.clearTimeout(authProgressTimer);
     window.clearTimeout(queueTimer);
     window.clearTimeout(autoSyncTimer);
+    window.clearTimeout(syncDebugTimer);
     try {
       await nativeFetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' });
     } catch (_) { /* continue to clear the local view even if the server is unavailable */ }
@@ -86,6 +92,7 @@
         mailboxBadge.textContent = `${body.state === 'AUTHENTICATED' ? '✓ Mailbox: Connected' : '… Mailbox: Connecting'} - ${currentCallsign}${pending}`;
       }
       syncStatus.hidden = !(active || syncFailedAfterLogin);
+      if (syncDebugButton) syncDebugButton.hidden = !(active || syncFailedAfterLogin || body.stage === 'complete' || body.stage === 'no_messages');
       if (active || syncFailedAfterLogin) {
         const message = escapeHtml(body.message || 'Synchronizing the Winlink mailbox…');
         const total = Number.isInteger(body.pending_count) ? body.pending_count : 0;
@@ -546,9 +553,36 @@
   function setRefreshAvailability(transferActive) {
     const button = document.querySelector('[data-action="refresh"]');
     if (!button) return;
-    button.disabled = Boolean(transferActive);
+    // Refresh is always available. A manual click is the recovery control for
+    // a stalled RF exchange and never requires logging out of the mailbox.
+    button.disabled = false;
     button.setAttribute('aria-busy', transferActive ? 'true' : 'false');
-    button.textContent = transferActive ? 'Sync in progress…' : 'Refresh';
+    button.textContent = 'Refresh';
+  }
+
+  function renderSyncDebug(payload) {
+    const sync = payload.sync || {};
+    const services = payload.services || {};
+    const devices = payload.devices || {};
+    if (syncDebugSummary) syncDebugSummary.innerHTML = `<strong>${escapeHtml(sync.stage_label || sync.stage || 'No active session')}</strong><span>${escapeHtml(sync.message || 'No mailbox session message')}</span><span>Pat state: ${escapeHtml(sync.state || 'unknown')}</span><span>Dire Wolf: ${escapeHtml(services['Dire Wolf'] || 'unknown')}</span><span>AGW bridge: ${escapeHtml(services['AGW bridge'] || 'unknown')}</span><span>DigiRig: audio ${devices.audio ? 'present' : 'missing'}, serial ${devices.serial ? 'present' : 'missing'}, PTT ${devices.ptt ? 'present' : 'missing'}</span>`;
+    const events = payload.events || [];
+    if (syncDebugEvents) syncDebugEvents.innerHTML = events.length ? events.map((event) => `<div class="sync-debug-event"><time>${escapeHtml(event.at || '')}</time><strong>${escapeHtml(event.source || '')}</strong><span>${escapeHtml(event.message || '')}</span></div>`).join('') : 'No events collected yet.';
+    if (syncDebugEvents) syncDebugEvents.scrollTop = syncDebugEvents.scrollHeight;
+  }
+
+  async function pollSyncDebug() {
+    if (!syncDebugDialog || !syncDebugDialog.open) return;
+    try {
+      const response = await fetch('/api/v1/mail/sync/debug', { cache: 'no-store' });
+      if (response.ok) renderSyncDebug(await response.json());
+    } catch (_) { /* debug view is advisory */ }
+    syncDebugTimer = window.setTimeout(pollSyncDebug, 1500);
+  }
+
+  async function openSyncDebug() {
+    if (!syncDebugDialog) return;
+    syncDebugDialog.showModal();
+    await pollSyncDebug();
   }
 
   async function logout() {
@@ -708,12 +742,12 @@
     const button = document.querySelector('[data-action="refresh"]');
     button.disabled = true;
     try {
-      const response = await fetch('/api/v1/mail/sync', { method: 'POST' });
+      const response = await fetch('/api/v1/mail/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restart: true }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Mailbox synchronization could not be started.');
       syncStatus.hidden = false;
       syncStatus.textContent = 'Starting a new Packet RMS synchronization…';
-      setRefreshAvailability(true);
+      setRefreshAvailability(false);
       await showFolder('inbox');
       pollMailboxSync();
     } catch (error) {
@@ -722,6 +756,8 @@
       setRefreshAvailability(false);
     }
   });
+  syncDebugButton?.addEventListener('click', openSyncDebug);
+  document.getElementById('sync-debug-close')?.addEventListener('click', () => { window.clearTimeout(syncDebugTimer); syncDebugDialog?.close(); });
   document.querySelector('[data-action="save-draft"]').addEventListener('click', async () => {
     try { await saveDraft(); } catch (error) { window.alert(error.message); }
   });

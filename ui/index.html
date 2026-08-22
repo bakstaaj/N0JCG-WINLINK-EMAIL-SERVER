@@ -32,9 +32,108 @@
     </section>
     <section class="card next-step"><div><p class="eyebrow">Next safe step</p><h2>Complete pre-radio validation</h2><p>Run software, audio, and configuration checks without enabling transmission.</p></div><a class="button" href="#diagnostics">Open diagnostics</a></section>
     <section id="diagnostics" class="card"><div class="card-heading"><h2>Diagnostics</h2><div><span id="diagnostic-status" class="status status-unknown">Checking…</span> <button class="header-button diagnostic-refresh" id="diagnostic-refresh" type="button">Refresh</button></div></div><ul id="diagnostic-list" class="checklist"><li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Checking local USB and serial evidence…</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Checking Dire Wolf installation and service state…</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Checking Winlink client installation and service state…</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Unavailable until the radio is connected.</small></span></li></ul><p id="diagnostic-observed" class="muted"></p></section>
+    <section id="audio-calibration" class="card"><div class="card-heading"><h2>Receive-only audio calibration</h2><span id="calibration-status" class="status status-unknown">Stopped</span></div><p class="muted">Noise-floor mode: leave the radio in monitor/open-squelch, then adjust only the WES radio volume. Starting this test pauses Dire Wolf briefly; it never starts Pat, keys PTT, or transmits RF.</p><div class="calibration-metrics"><div><span>Noise-floor quality</span><strong id="calibration-quality">—</strong></div><div><span>Latest peak</span><strong id="calibration-level">—</strong></div><div><span>Average RMS</span><strong id="calibration-average">—</strong></div><div><span>RMS dBFS</span><strong id="calibration-rms">—</strong></div><div><span>Peak dBFS</span><strong id="calibration-peak">—</strong></div></div><button class="button" id="calibration-start" type="button">Start receive test</button> <button class="header-button" id="calibration-stop" type="button" disabled>Stop receive test</button><p id="calibration-guidance" class="muted">Start the test and adjust the radio volume until the noise floor says usable noise floor.</p><pre id="calibration-log" class="calibration-log">No calibration evidence collected.</pre><hr><h3>Automatic RMS receive calibration</h3><p class="muted">Runs up to ten short RMS sessions, displays every packet level and S/N result, and stops at the maximum useful gain; noise alone never increases gain.</p><button class="button" id="autogain-toggle" type="button">Run RMS receive calibration</button><p id="autogain-status" class="muted">Ready to run.</p><pre id="autogain-log" class="calibration-log">No automatic calibration evidence collected.</pre></section>
   </main>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> N0JCG Open Radio Platform</footer>
   <script>
+    let calibrationTimer = null;
+    let calibrationActive = false;
+    function calibrationMessage(message, isError = false) {
+      const element = document.getElementById('calibration-guidance');
+      if (!element) return;
+      element.textContent = message;
+      element.classList.toggle('calibration-error', isError);
+    }
+    async function refreshAudioCalibration() {
+      const response = await fetch('/api/v1/operator/audio-calibration', { cache: 'no-store', credentials: 'same-origin' });
+      if (!response.ok) throw new Error(`Calibration status request failed (HTTP ${response.status})`);
+      const data = await response.json(); const audio = data.audio || {};
+      calibrationActive = Boolean(data.active);
+      document.getElementById('calibration-status').textContent = calibrationActive ? 'Running · receive only' : 'Stopped';
+      document.getElementById('calibration-level').textContent = audio.latest_level ?? '—';
+      const quality = document.getElementById('calibration-quality');
+      quality.textContent = audio.quality || '—';
+      quality.className = audio.quality === 'too quiet' ? 'calibration-quality--quiet' : audio.quality === 'too hot / clipping' ? 'calibration-quality--hot' : audio.quality === 'usable noise floor' ? 'calibration-quality--usable' : '';
+      document.getElementById('calibration-average').textContent = audio.average_level ?? '—';
+      document.getElementById('calibration-rms').textContent = audio.rms_dbfs == null ? '—' : `${audio.rms_dbfs} dBFS`;
+      document.getElementById('calibration-peak').textContent = audio.peak_dbfs == null ? '—' : `${audio.peak_dbfs} dBFS`;
+      calibrationMessage(audio.guidance || 'Adjust the physical radio volume while watching the level.');
+      document.getElementById('calibration-log').textContent = (data.recent_events || []).slice(-12).join('\n') || 'No calibration evidence collected.';
+      const toggle = document.getElementById('calibration-start');
+      toggle.disabled = false;
+      toggle.textContent = calibrationActive ? 'Stop receive test' : 'Start receive test';
+      document.getElementById('calibration-stop').hidden = true;
+    }
+    async function setAudioCalibration(enabled) {
+      const response = await fetch('/api/v1/operator/audio-calibration', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({enabled}) });
+      const contentType = response.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json') ? await response.json() : {};
+      if (!response.ok) throw new Error(payload.error || `Calibration request failed (HTTP ${response.status})`);
+      await refreshAudioCalibration();
+      calibrationMessage(enabled ? 'Receive test running. Adjust the radio volume while watching the level.' : 'Receive test stopped.');
+      if (enabled && !calibrationTimer) calibrationTimer = window.setInterval(() => refreshAudioCalibration().catch(() => {}), 400);
+      if (!enabled && calibrationTimer) { window.clearInterval(calibrationTimer); calibrationTimer = null; }
+    }
+    document.getElementById('calibration-start').addEventListener('click', async (event) => {
+      event.currentTarget.disabled = true;
+      try { await setAudioCalibration(!calibrationActive); } catch (error) { event.currentTarget.disabled = false; calibrationMessage(error.message, true); }
+    });
+    document.getElementById('calibration-stop').addEventListener('click', async (event) => {
+      event.currentTarget.disabled = true;
+      try { await setAudioCalibration(false); } catch (error) { event.currentTarget.disabled = false; calibrationMessage(error.message, true); }
+    });
+    refreshAudioCalibration().catch((error) => calibrationMessage(error.message, true));
+    let autogainActive = false;
+    async function refreshAutogain() {
+      const response = await fetch('/api/v1/operator/audio-autogain', { cache: 'no-store', credentials: 'same-origin' });
+      if (!response.ok) throw new Error(`Automatic calibration status failed (HTTP ${response.status})`);
+      const data = await response.json();
+      // POST responses wrap the state in `autogain`; GET status responses
+      // return the state directly. Accept both so polling cannot erase the
+      // running or final result.
+      const state = data.autogain || data || {};
+      autogainActive = Boolean(state.active);
+      document.getElementById('autogain-toggle').textContent = autogainActive ? 'Stop RMS receive calibration' : 'Run RMS receive calibration';
+      // An idle controller is ready to run; do not expose the old "Not armed"
+      // wording, which made a working button look inert after polling refreshed
+      // the initial status text.
+      const gain = Number.isFinite(state.gain) ? ` DigiRig gain: ${state.gain}/35.` : '';
+      const output = Array.isArray(state.output) ? state.output : [];
+      const log = document.getElementById('autogain-log');
+      if (log) log.textContent = output.length ? output.join('\n') : 'No automatic calibration evidence collected.';
+      document.getElementById('autogain-status').textContent = state.active
+        ? `${state.message || 'Waiting for RMS test…'}${gain}`
+        : (state.gain == null ? 'Ready to run.' : `${state.message || state.last_attempt || 'Calibration finished.'} Final DigiRig gain: ${state.gain}/35.`);
+    }
+    document.getElementById('autogain-toggle').textContent = 'Run RMS receive calibration';
+    document.getElementById('autogain-status').textContent = 'Ready to run.';
+    const autoHeading = [...document.querySelectorAll('#audio-calibration h3')].find((node) => node.textContent.includes('Automatic RMS'));
+    if (autoHeading && autoHeading.nextElementSibling) autoHeading.nextElementSibling.textContent = 'Runs up to five short RMS sessions, measures raw PCM and packet S/N, and stops at the maximum useful gain; noise alone never increases gain.';
+    async function setAutogain(enabled) {
+      const response = await fetch('/api/v1/operator/audio-autogain', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({enabled}) });
+      const contentType = response.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json') ? await response.json() : {};
+      if (!response.ok) throw new Error(payload.error || `Automatic calibration request failed (HTTP ${response.status})`);
+      await refreshAutogain();
+    }
+    document.getElementById('autogain-toggle').onclick = async (event) => {
+      event.preventDefault();
+      const button = event.currentTarget;
+      const enabling = !autogainActive;
+      button.disabled = true;
+      button.textContent = enabling ? 'Starting RMS calibration…' : 'Stopping RMS calibration…';
+      document.getElementById('autogain-status').textContent = enabling ? 'Calibration command sent; starting the first RMS session…' : 'Stopping calibration…';
+      try {
+        await setAutogain(enabling);
+        document.getElementById('autogain-status').textContent = enabling ? 'RMS calibration is running.' : 'Ready to run.';
+      } catch (error) {
+        document.getElementById('autogain-status').textContent = `Calibration command failed: ${error.message}`;
+      } finally {
+        button.disabled = false;
+      }
+    };
+    refreshAutogain().catch(() => {});
+    window.setInterval(() => refreshAutogain().catch(() => {}), 1000);
     document.getElementById('logout-button').addEventListener('click', async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
