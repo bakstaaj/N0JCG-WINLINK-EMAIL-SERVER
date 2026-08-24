@@ -119,7 +119,7 @@ def add_header_footer(doc):
         set_run(r, size=8, color=SLATE, bold=True)
         first_footer = section.first_page_footer.paragraphs[0]
         first_footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.5    Page 1"), size=8, color=SLATE)
+        set_run(first_footer.add_run("N0JCG Open Radio Platform  |  N0JCG Winlink Email Server v0.1.6    Page 1"), size=8, color=SLATE)
         add_bottom_rule(first_footer)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -233,7 +233,7 @@ def build():
     p.paragraph_format.space_after = Pt(26)
     set_run(p.add_run("A complete guide to the Raspberry Pi client appliance, Winlink mailbox access, DigiRig Mobile integration, and safe Packet RMS operation."), size=11, color=NAVY)
     add_table(doc, ["Release", "Publication"], [
-        ("0.1.5", "August 2026"),
+        ("0.1.6", "August 2026"),
         ("PRODUCT ROLE\nClient-side Winlink email", "AUDIENCE\nOperators and mailbox users"),
     ], [3.42, 3.42])
     doc.add_page_break()

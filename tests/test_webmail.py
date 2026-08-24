@@ -18,6 +18,14 @@ RMS_SPEC.loader.exec_module(RMS_MODULE)
 
 
 class WebmailHelpersTests(unittest.TestCase):
+    def test_pat_response_accepts_legacy_windows_punctuation(self):
+        body = b'{"subject":"Don\x92t miss out"}'
+        self.assertEqual(MODULE.decode_pat_response(body), '{"subject":"Don\u2019t miss out"}')
+
+    def test_pat_response_prefers_utf8(self):
+        body = '{"subject":"Don\u2019t miss out"}'.encode("utf-8")
+        self.assertEqual(MODULE.decode_pat_response(body), '{"subject":"Don\u2019t miss out"}')
+
     def test_webmail_session_cookie_is_not_persistent(self):
         cookie = MODULE.session_cookie("test-token")
         self.assertIn("HttpOnly", cookie)

@@ -208,6 +208,10 @@ This means the Winlink account was authenticated, but the local mailbox service 
 
 The WES Inbox, folders, and delete actions manage the local appliance mailbox. Winlink Webmail is a separate CMS view and may continue to show the same server-side message after WES downloads or locally deletes it. Remove a message separately through Winlink Webmail when server-side retention also needs to change.
 
+### A message fails to open with a character-decoding error
+
+Some forwarded Winlink messages contain legacy Windows-1252 punctuation rather than pure UTF-8. The appliance accepts UTF-8 first and falls back safely for that legacy text. If a message still cannot open, select **Refresh**, review the operator diagnostics, and capture the message subject and last client event for support. Do not delete the message as a first troubleshooting step.
+
 ### A previous RF session is still active
 
 Only one mailbox user and one RF session are allowed at a time. A new login terminates the previous session, releases the Pat/AGW connection, and allows the radio path to settle before starting again. After a failed exchange, wait for the visible failure state and the RF activity to stop before retrying. The operator diagnostics show the last client/RF event.
@@ -215,6 +219,10 @@ Only one mailbox user and one RF session are allowed at a time. A new login term
 ### Login fails or remains on “Validating through the Winlink client…”
 
 Confirm the Winlink address and secure-login password. Check the Pi network connection, radio power, DigiRig cabling, frequency, packet station ID, RMS target, and system time. The login screen intentionally remains open until secure login is accepted; no mailbox is exposed during this wait. A failed RF exchange returns the user to the login screen. Repeated failed attempts are rate-limited for protection.
+
+### Authentication succeeds but the mailbox transfer is slow
+
+Packet RMS is a low-bandwidth radio transport. The operator console and webmail progress state distinguish RMS contact, secure-login acceptance, mailbox index, message proposals, download, and completion. Leave **Refresh** disabled while a transfer is active. A new login ends the previous single-user RF session; wait for radio activity to stop before retrying.
 
 ### Device is detected but not ready
 
@@ -249,5 +257,6 @@ Use the operator console for configuration and diagnostics. Use webmail for mail
 | Automatic mailbox sync | Operator setting, 5–1440 minutes; default 30 |
 | RMS gateway finder | Cached official list; closest five shown; GPS or simulated location |
 | Login security | Webmail opens only after Winlink secure-login acceptance |
+| Message text compatibility | UTF-8 first; legacy Windows-1252 fallback for mailbox responses |
 
 *N0JCG Winlink Email Server | N0JCG Open Radio Platform | Client-side appliance, not an RMS gateway*

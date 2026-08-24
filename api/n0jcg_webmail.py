@@ -673,6 +673,19 @@ def wait_for_pat_auth(job, timeout=35):
     return False, message
 
 
+def decode_pat_response(body):
+    """Decode Pat mailbox API responses, including legacy Winlink text.
+
+    Most responses are UTF-8 JSON. Some older or forwarded messages retain
+    Windows-1252 punctuation such as byte 0x92 (a curly apostrophe). Decode
+    those responses without rejecting the entire mailbox request.
+    """
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError:
+        return body.decode("cp1252", errors="replace")
+
+
 def pat_mailbox_request(session, box, mid=None, method="GET", payload=None, suffix=""):
     """Ask a short-lived Pat HTTP process to decode mailbox messages."""
     config = None
@@ -735,7 +748,7 @@ def pat_mailbox_request(session, box, mid=None, method="GET", payload=None, suff
                 raise RuntimeError(detail or "The local Winlink mailbox service stopped unexpectedly. Select Refresh or ask the operator to check the client service.")
             try:
                 with urllib.request.urlopen(request, timeout=1) as response:
-                    body = response.read().decode("utf-8")
+                    body = decode_pat_response(response.read())
                     if not body:
                         return {}
                     try:
