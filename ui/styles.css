@@ -35,6 +35,14 @@ h1, h2, p { margin-top: 0; } h1 { margin-bottom: var(--n0-space-2); color: var(-
 .facts label input { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid var(--n0-color-border); border-radius: var(--n0-radius-sm); font: inherit; color: var(--n0-color-text); }
 .gateway-card { grid-column: 1 / -1; }
 .gateway-location-form { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 10px; align-items: end; }
+.trial-notice { display: inline-block; margin: 10px 0 0; padding: 8px 14px; border-radius: 999px; color: #7a4300; background: #fff0d2; font-weight: 700; }
+.inline-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; margin-top: 18px; }
+.inline-form label { display: grid; gap: 6px; color: var(--n0-color-text-muted); }
+.inline-form input { width: 100%; padding: 10px; border: 1px solid var(--n0-color-border); border-radius: var(--n0-radius-sm); font: inherit; }
+.registration-form { grid-template-columns: 1fr; gap: 10px; }
+.registration-form label, .registration-form input { width: 100%; box-sizing: border-box; }
+.registration-form .button { justify-self: start; }
+@media (max-width: 600px) { .inline-form { grid-template-columns: 1fr; } }
 .gateway-location-form label { display: grid; gap: 5px; color: var(--n0-color-text-muted); font-size: .78rem; }
 .gateway-location-form input { width: 100%; padding: 9px; border: 1px solid var(--n0-color-border); border-radius: var(--n0-radius-sm); font: inherit; }
 .gateway-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }

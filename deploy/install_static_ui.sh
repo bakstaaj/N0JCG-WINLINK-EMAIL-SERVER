@@ -38,6 +38,7 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
     test -f "$REPO_ROOT/deploy/configure_packet_radio.sh"
+    test -f "$REPO_ROOT/deploy/configure_gps.sh"
     test -f "$REPO_ROOT/tools/agwpe_identity_bridge.py"
     test -f "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service"
     test -f "$REPO_ROOT/branding/tokens.css"
@@ -52,6 +53,7 @@ fi
 
 sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
 sudo install -d -m 0755 "$APP_ROOT/api" "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink /var/lib/n0jcg-winlink-webmail
+sudo chown "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink
 sudo install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.local/state/pat"
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/ui/styles.css"
@@ -64,9 +66,17 @@ sudo install -m 0644 "$REPO_ROOT/assets/brand/n0jcg-primary-light.svg" "$INSTALL
 sudo install -m 0644 "$REPO_ROOT/assets/brand/N0JCG_Header_Dark_Approved.png" "$INSTALL_ROOT/assets/brand/N0JCG_Header_Dark_Approved.png"
 sudo install -m 0644 "$REPO_ROOT/config/registration.example.json" "$APP_ROOT/config/registration.example.json"
 sudo install -m 0755 "$REPO_ROOT/tools/registration.py" "$APP_ROOT/tools/registration.py"
+sudo install -d -m 0755 "$APP_ROOT/tools/n0jcg_licensing"
+sudo install -m 0644 "$REPO_ROOT/tools/n0jcg_licensing/__init__.py" "$APP_ROOT/tools/n0jcg_licensing/__init__.py"
+sudo install -m 0644 "$REPO_ROOT/tools/n0jcg_licensing/client.py" "$APP_ROOT/tools/n0jcg_licensing/client.py"
 sudo install -m 0755 "$REPO_ROOT/api/n0jcg_webmail.py" "$APP_ROOT/api/n0jcg_webmail.py"
 sudo install -m 0644 "$REPO_ROOT/api/winlink_templates.py" "$APP_ROOT/api/winlink_templates.py"
 sudo install -m 0644 "$REPO_ROOT/api/rms_gateways.py" "$APP_ROOT/api/rms_gateways.py"
+# MSYS2 may transfer checked-out Python helpers with CRLF endings. Linux
+# shebangs must be LF-only or env will look for names such as python3\r.
+for helper in "$APP_ROOT"/tools/*.py "$APP_ROOT"/tools/*.sh; do
+    [[ -f "$helper" ]] && sudo sed -i 's/\r$//' "$helper"
+done
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-webmail.service" | sudo tee /etc/systemd/system/n0jcg-webmail.service >/dev/null
 sudo chown -R "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink-webmail
 
@@ -77,6 +87,8 @@ if ! command -v gpspipe >/dev/null 2>&1; then
     sudo apt-get update
     sudo apt-get install -y gpsd gpsd-clients
 fi
+sudo install -m 0755 "$REPO_ROOT/deploy/configure_gps.sh" "$APP_ROOT/tools/configure_gps.sh"
+sudo "$APP_ROOT/tools/configure_gps.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_operator_auth.sh" "$APP_ROOT/tools/setup_operator_auth.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_connectivity.sh" "$APP_ROOT/tools/setup_connectivity.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" "$APP_ROOT/tools/n0jcg-usb-gadget.sh"
@@ -88,6 +100,10 @@ sudo install -m 0755 "$REPO_ROOT/tools/wes_direwolf_autogain.py" /usr/local/sbin
 sudo install -m 0755 "$REPO_ROOT/tools/wes_audio_tee.py" /usr/local/sbin/n0jcg-wes-audio-tee
 sudo install -m 0755 "$REPO_ROOT/tools/wes_apply_gain.py" /usr/local/sbin/n0jcg-wes-apply-gain
 sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tools/agwpe_identity_bridge.py"
+# Normalize the service helpers after their final installation location is set.
+for helper in /usr/local/sbin/n0jcg-wes-* "$APP_ROOT"/tools/*.py "$APP_ROOT"/tools/*.sh; do
+    [[ -f "$helper" ]] && sudo sed -i 's/\r$//' "$helper"
+done
 
 # Install the Pat ARM64 client. The bundled client-side build is based on the
 # official Pat 0.17.0 source and uses the standard Winlink FBB exchange; its

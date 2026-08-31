@@ -18,14 +18,24 @@
   const syncDebugSummary = document.getElementById('sync-debug-summary');
   const syncDebugEvents = document.getElementById('sync-debug-events');
   const mailboxBadge = document.querySelector('.status-badge');
+  const trialNotice = document.getElementById('trial-notice');
   let sessionTimer;
   let syncTimer;
   let authProgressTimer;
   let queueTimer;
   let autoSyncTimer;
   let syncDebugTimer;
+  let loginRetryTimer;
+  let loginRetryUntil = 0;
   let redirectingToLogin = false;
   let currentCallsign = '';
+  function updateRegistrationNotice(registration) {
+    if (!trialNotice) return;
+    const trial = !registration || registration.mode !== 'registered';
+    trialNotice.hidden = !trial;
+    trialNotice.textContent = trial ? 'Trial: Limited to one message per login.' : '';
+    trialNotice.setAttribute('aria-hidden', trial ? 'false' : 'true');
+  }
   const nativeFetch = window.fetch.bind(window);
   const emptyCopy = {
     inbox: ['No mailbox connection', 'The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.'],
@@ -79,10 +89,7 @@
       setRefreshAvailability(active);
       if (body.state === 'ERROR') {
         window.clearTimeout(syncTimer);
-        workspace.hidden = true;
-        authGate.hidden = false;
-        resetMailboxState();
-        authMessage(document.getElementById('login-form'), body.message || 'The RMS server stopped responding before authentication completed. Check the selected RMS gateway, radio frequency, audio, and PTT path.');
+        await requireLogin(body.message || 'The RMS server stopped responding before authentication completed. Check the selected RMS gateway, radio frequency, audio, and PTT path.');
         return;
       }
       if (mailboxBadge && currentCallsign) {
@@ -219,7 +226,10 @@
         folderTitle.textContent = `Custom folder ${messages.length}`;
         folderView.innerHTML = messages.length ? `${bulkBar()}<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="${escapeHtml(message.box || 'in')}"><input class="message-select" type="checkbox" data-message-id="${escapeHtml(message.MID)}" aria-label="Select message"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : '<strong>Folder is empty</strong><p>Drag a message here from Inbox to organize it.</p>';
         if (messages.length) installBulkActions(folder);
-        folderView.querySelectorAll('button[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
+        folderView.querySelectorAll('button[data-message-id]').forEach((button) => {
+          button.title = 'Double-click to open this message';
+          button.addEventListener('dblclick', () => showMessage(folder, button.dataset.messageId));
+        });
         folderView.querySelectorAll('[draggable="true"]').forEach((button) => button.addEventListener('dragstart', (event) => event.dataTransfer.setData('application/x-n0jcg-message', JSON.stringify({ mid: button.dataset.messageId, box: button.dataset.messageBox, sourceFolder: folder }))));
         return;
       } catch (error) { folderView.innerHTML = `<strong>Folder unavailable</strong><p>${escapeHtml(error.message)}</p>`; return; }
@@ -292,7 +302,10 @@
       folderView.innerHTML = count ? `${bulkBar()}<div class="message-list">${messages.map((message) => `<button class="message-row${message.Unread ? ' unread' : ''}" draggable="true" type="button" data-message-id="${escapeHtml(message.MID)}" data-message-box="${box}"><input class="message-select" type="checkbox" data-message-id="${escapeHtml(message.MID)}" aria-label="Select message"><strong>${escapeHtml(message.Subject || '(no subject)')}</strong><span>${escapeHtml(JSON.stringify(message.From || ''))}</span><time>${escapeHtml(message.Date || '')}</time></button>`).join('')}</div>` : `<strong>No messages</strong><p>This mailbox folder is empty.</p>`;
       if (count) installBulkActions(folder);
       folderTitle.textContent = title;
-      folderView.querySelectorAll('button[data-message-id]').forEach((button) => button.addEventListener('click', () => showMessage(folder, button.dataset.messageId)));
+      folderView.querySelectorAll('button[data-message-id]').forEach((button) => {
+        button.title = 'Double-click to open this message';
+        button.addEventListener('dblclick', () => showMessage(folder, button.dataset.messageId));
+      });
       folderView.querySelectorAll('[draggable="true"]').forEach((button) => button.addEventListener('dragstart', (event) => event.dataTransfer.setData('application/x-n0jcg-message', JSON.stringify({ mid: button.dataset.messageId, box: button.dataset.messageBox, sourceFolder: folder }))));
     } catch (error) {
       folderView.innerHTML = `<strong>Mailbox unavailable</strong><p>${error.message}</p>`;
@@ -613,7 +626,23 @@
   async function submitAuth(event) {
     event.preventDefault();
     redirectingToLogin = false;
+    window.clearInterval(loginRetryTimer);
+    loginRetryTimer = null;
+    loginRetryUntil = 0;
     const formElement = event.currentTarget;
+    // A new credential attempt must start with a blank, hidden mailbox. This
+    // prevents a previously authenticated view from remaining visible while
+    // the replacement Winlink login is being verified.
+    window.clearTimeout(syncTimer);
+    window.clearTimeout(authProgressTimer);
+    window.clearTimeout(queueTimer);
+    window.clearTimeout(autoSyncTimer);
+    window.clearTimeout(syncDebugTimer);
+    signature = '';
+    currentCallsign = '';
+    resetMailboxState();
+    workspace.hidden = true;
+    authGate.hidden = false;
     const data = Object.fromEntries(new FormData(formElement));
     const callsign = String(data.email || '').split('@', 1)[0].trim().toUpperCase();
     const button = formElement.querySelector('button[type="submit"]');
@@ -647,6 +676,7 @@
       authGate.hidden = true;
       workspace.hidden = false;
       currentCallsign = body.callsign;
+      updateRegistrationNotice(body.registration);
       showSignedInUser(body.callsign);
       scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
@@ -660,9 +690,26 @@
         ? `${lastAuthProgressMessage} The RMS server did not return a final mailbox/authentication result.`
         : error.message;
       authMessage(formElement, `${detail} No mailbox data was opened. Check the operator diagnostics for the last RF/client event.`);
+      if (/Wait 1 minute, then try the Winlink login again/i.test(detail)) {
+        loginRetryUntil = Date.now() + 60000;
+        const updateRetryMessage = () => {
+          const remaining = Math.max(0, Math.ceil((loginRetryUntil - Date.now()) / 1000));
+          if (remaining === 0) {
+            window.clearInterval(loginRetryTimer);
+            loginRetryTimer = null;
+            button.disabled = false;
+            authMessage(formElement, 'The RMS session-clear wait is complete. You may try the Winlink login again.');
+            return;
+          }
+          button.disabled = true;
+          authMessage(formElement, `The RMS is still clearing the previous packet session. Wait 1 minute before trying again (${remaining}s remaining). No mailbox data was opened.`);
+        };
+        updateRetryMessage();
+        loginRetryTimer = window.setInterval(updateRetryMessage, 1000);
+      }
     } finally {
       window.clearTimeout(authProgressTimer);
-      button.disabled = false;
+      button.disabled = loginRetryUntil > Date.now();
     }
   }
 
@@ -674,6 +721,7 @@
       authGate.hidden = true;
       workspace.hidden = false;
       currentCallsign = body.callsign;
+      updateRegistrationNotice(body.registration);
       showSignedInUser(body.callsign);
       scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
@@ -744,6 +792,14 @@
     try {
       const response = await fetch('/api/v1/mail/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restart: true }) });
       const body = await response.json().catch(() => ({}));
+      if (response.status === 401 && body.trial_relogin) {
+        resetMailboxState();
+        workspace.hidden = true;
+        authGate.hidden = false;
+        document.getElementById('login-form').reset();
+        authMessage(document.getElementById('login-form'), body.error || 'Trial mode requires a new Winlink login.');
+        return;
+      }
       if (!response.ok) throw new Error(body.error || 'Mailbox synchronization could not be started.');
       syncStatus.hidden = false;
       syncStatus.textContent = 'Starting a new Packet RMS synchronization…';

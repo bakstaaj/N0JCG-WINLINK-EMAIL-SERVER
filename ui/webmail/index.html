@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     .mail-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:var(--n0-space-6); }
-    #mail-workspace[hidden] { display:none !important; }
+    #mail-workspace[hidden], .trial-notice[hidden] { display:none !important; }
     .mail-nav { display:grid; align-content:start; gap:var(--n0-space-2); }
     .mail-nav button, .mail-toolbar button { border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); padding:10px 12px; color:var(--n0-color-navy); background:var(--n0-color-white); text-align:left; font:inherit; cursor:pointer; }
     .mail-nav button.active, .mail-nav button:hover, .mail-toolbar button:hover { color:var(--n0-color-white); background:var(--n0-color-blue); }
@@ -117,7 +117,7 @@
   </header>
   <main class="shell">
     <section class="intro" aria-labelledby="mail-title">
-      <div><p class="eyebrow">N0JCG Open Radio Platform</p><h1 id="mail-title">Webmail<span id="mail-user" aria-label="signed-in callsign"></span></h1><p class="lede">Compose and manage Winlink messages through the client appliance mailbox.</p></div>
+      <div><p class="eyebrow">N0JCG Open Radio Platform</p><h1 id="mail-title">Webmail<span id="mail-user" aria-label="signed-in callsign"></span></h1><p class="lede">Compose and manage Winlink messages through the client appliance mailbox.</p><p id="trial-notice" class="trial-notice" role="status" hidden>Trial: Limited to one message per login.</p></div>
       <div class="status-badge status-unavailable" role="status"><span aria-hidden="true">!</span> Mailbox: Not connected</div>
     </section>
     <section id="auth-gate" class="card auth-gate" aria-labelledby="auth-title">
@@ -156,6 +156,6 @@
   </main>
   <dialog id="sync-debug-dialog" class="sync-debug-dialog" aria-labelledby="sync-debug-title"><div class="sync-debug-header"><h3 id="sync-debug-title">Packet RMS session details</h3><button id="sync-debug-close" class="sync-debug-close" type="button">Close</button></div><div id="sync-debug-summary" class="sync-debug-summary">Waiting for session data…</div><div id="sync-debug-events" class="sync-debug-events" role="log" aria-live="polite">No events collected yet.</div></dialog>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> Client-side appliance, not an RMS gateway</footer>
-  <script src="webmail.js?v=20260820-progressive-sync5"></script>
+  <script src="webmail.js?v=20260831-registration-notice1"></script>
 </body>
 </html>

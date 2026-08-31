@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "product_slug": "winlink-email-appliance",
-  "product_id": "N0JCG-WINLINK-EMAIL-SERVER",
+  "product_id": "winlink-email-appliance",
+  "license_prefix": "N0JCG-WLA-",
   "product_display_name": "N0JCG Winlink Email Server",
   "registration_status": "unregistered",
   "device_id": null,

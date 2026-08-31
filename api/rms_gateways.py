@@ -88,6 +88,8 @@ def normalize_gateways(payload):
             mode = str(_first(channel, "SupportedModes", "supportedModes", "Mode", "mode", "RequestedMode", "requestedMode") or _first(item, "RequestedMode", "requestedMode") or "").upper()
             baud = _number(_first(channel, "Baud", "baud", "BaudRate", "baudRate"))
             service = str(_first(channel, "ServiceCode", "serviceCode", "Service", "service") or _first(item, "ServiceCode", "serviceCode") or "PUBLIC").upper()
+            digipeater = str(_first(channel, "Digipeater", "digipeater", "DigipeaterCallsign", "digipeaterCallsign", "Via", "via") or _first(item, "Digipeater", "digipeater", "DigipeaterCallsign", "digipeaterCallsign", "Via", "via") or "").upper()
+            record_type = "DIGI" if "DIGI" in service or str(_first(channel, "Type", "type", "StationType", "stationType") or "").upper() in {"DIGI", "DIGIPEATER"} else "RMS"
             records.append({
                 "callsign": callsign,
                 "name": str(_first(item, "Name", "name", "Comments", "comments") or ""),
@@ -97,6 +99,9 @@ def normalize_gateways(payload):
                 "mode": mode or "PACKET",
                 "baud": int(baud) if baud is not None else None,
                 "service_code": service,
+                "type": record_type,
+                "digipeater": digipeater,
+                "rms_target": callsign,
                 "last_status": gateway_status,
             })
     return records
@@ -155,7 +160,9 @@ def refresh_cache(timeout=20):
 
 def _read_gpsd():
     try:
-        result = subprocess.run(["gpspipe", "-w", "-n", "1"], capture_output=True, text=True, timeout=4)
+        # gpspipe's first record is normally VERSION/DEVICES/WATCH metadata;
+        # read several reports so a TPV position can actually be observed.
+        result = subprocess.run(["gpspipe", "-w", "-n", "10"], capture_output=True, text=True, timeout=6)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
     for line in result.stdout.splitlines():

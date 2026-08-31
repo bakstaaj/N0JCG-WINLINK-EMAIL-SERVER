@@ -18,6 +18,30 @@ RMS_SPEC.loader.exec_module(RMS_MODULE)
 
 
 class WebmailHelpersTests(unittest.TestCase):
+    def test_registration_uses_standard_n0jcg_license_contract(self):
+        registration = (ROOT / "tools" / "registration.py").read_text(encoding="utf-8")
+        ui = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('PRODUCT_ID = "winlink-email-appliance"', registration)
+        self.assertIn('LICENSE_PREFIX = "N0JCG-WLA-"', registration)
+        self.assertIn("def activate(path: Path, license_serial: str, email: str)", registration)
+        self.assertIn('name="license_serial"', ui)
+        self.assertIn('name="email"', ui)
+        self.assertIn("Registered email", ui)
+
+    def test_trial_download_limit_is_enforced_by_sync_worker(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('"download_limit": None if registration["registered"] else 1', source)
+        self.assertIn('job["trial_limit_reached"] = True', source)
+        self.assertIn("Register WES for unlimited message downloads", source)
+
+    def test_trial_refresh_requires_a_new_login(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        ui = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        self.assertIn("Trial mode requires a new Winlink login", source)
+        self.assertIn('"trial_relogin": True', source)
+        self.assertIn("if (response.status === 401 && body.trial_relogin)", ui)
+        self.assertIn("authGate.hidden = false", ui)
+
     def test_pat_response_accepts_legacy_windows_punctuation(self):
         body = b'{"subject":"Don\x92t miss out"}'
         self.assertEqual(MODULE.decode_pat_response(body), '{"subject":"Don\u2019t miss out"}')
@@ -32,6 +56,12 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("SameSite=Strict", cookie)
         self.assertNotIn("Max-Age", cookie)
 
+    def test_messages_require_double_click_to_open(self):
+        script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        self.assertEqual(script.count("button.addEventListener('dblclick', () => showMessage"), 2)
+        self.assertNotIn("button.addEventListener('click', () => showMessage", script)
+        self.assertIn("Double-click to open this message", script)
+
     def test_session_expiry_is_disabled_by_default(self):
         self.assertEqual(MODULE.SESSION_IDLE, 0)
 
@@ -41,6 +71,38 @@ class WebmailHelpersTests(unittest.TestCase):
         clear_path = source.index("clear_login_failures(client_id)", success_path)
         token_path = source.index("token = create_session", success_path)
         self.assertLess(clear_path, token_path)
+
+    def test_login_wait_does_not_treat_challenge_or_ff_as_authentication(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        pq_block = source[source.index('elif re.search(r"Login \\[\\d+\\]|;PQ"'):source.index('elif line.lstrip(">") == "FF"')]
+        ff_block = source[source.index('elif line.lstrip(">") == "FF"'):source.index('elif re.match(r"^>?PM')]
+        self.assertNotIn('job["auth_event"].set()', pq_block)
+        self.assertNotIn('job["auth_event"].set()', ff_block)
+        self.assertIn("Accepting\\s+\\S+", source)
+        self.assertIn("PM/FC/F>/FS are only intermediate protocol", source)
+        self.assertIn("Handle rejection first", source)
+        self.assertIn('if FAILURE_RE.search(line):', source)
+        self.assertIn('job["stage_label"] = "Authentication rejected"', source)
+        self.assertIn('if job.get("state") != "AUTHENTICATED":', source)
+        self.assertIn("before secure login was accepted", source)
+        self.assertIn("stdout is consumed by a separate worker", source)
+        self.assertIn("process_exit_grace_deadline", source)
+        self.assertIn("does not match login callsign", source)
+        self.assertIn("Some RMS sessions close with FQ immediately", source)
+        self.assertIn('job["ff_seen"] = True', source)
+
+    def test_failed_login_stays_at_login_gate(self):
+        script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        login_success = script.index("if (!response.ok) throw new Error")
+        workspace_open = script.index("workspace.hidden = false", login_success)
+        self.assertLess(login_success, workspace_open)
+        self.assertIn("No mailbox data was opened", script)
+        self.assertIn("loginRetryUntil = Date.now() + 60000", script)
+        self.assertIn("RMS session-clear wait is complete", script)
+        self.assertIn("A new credential attempt must start with a blank, hidden mailbox", script)
+        self.assertIn("currentCallsign = '';", script)
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('self.send_json(HTTPStatus.UNAUTHORIZED, {"error": evidence, "source": "pat"}, clear_session_cookie())', source)
 
     def test_sync_status_exposes_safe_transport_diagnostics(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
@@ -78,10 +140,17 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('service_state("n0jcg-agwpe-identity-bridge.service")', source)
         self.assertIn('"pat": "on-demand"', source)
 
+    def test_gps_reads_multiple_reports_and_uses_stable_device_setup(self):
+        source = (ROOT / "api" / "rms_gateways.py").read_text(encoding="utf-8")
+        self.assertIn('["gpspipe", "-w", "-n", "10"]', source)
+        script = (ROOT / "deploy" / "configure_gps.sh").read_text(encoding="utf-8")
+        self.assertIn("/dev/serial/by-id", script)
+        self.assertIn("gpsd.socket", script)
+
     def test_authentication_progress_has_safe_granular_stages(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
         self.assertIn('"stage_label": "Contacting RMS"', source)
-        self.assertIn("Mailbox proposal received", source)
+        self.assertIn("RMS mailbox proposal received; waiting for authenticated mailbox records", source)
         self.assertIn('job["stage"] = "complete"', source)
         self.assertIn("packet session closed cleanly", source)
         self.assertIn('job["stage"] = "finalizing"', source)
@@ -92,7 +161,8 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('job["state"] = "AUTHENTICATED"', source)
         self.assertIn('"stage_label"] = "RMS connected"', source)
         self.assertIn("Waiting for the RMS packet-session response", source)
-        self.assertIn("Mailbox index requested; waiting for RMS message records", source)
+        self.assertIn("Secure login is still in progress; waiting for the RMS authorization result", source)
+        self.assertNotIn("The client requested the mailbox index; waiting for authenticated RMS records", source)
         self.assertIn("RMS mailbox records received; waiting for the mailbox summary (F>)", source)
         self.assertIn("Message selection sent; waiting for the RMS download", source)
         self.assertIn("RMS mailbox records received; waiting for the mailbox summary (F>)", source)
