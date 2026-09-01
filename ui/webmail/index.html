@@ -108,9 +108,21 @@
     .folder-count { display:inline-grid; min-width:1.5em; min-height:1.5em; place-items:center; margin-left:4px; padding:0 4px; border-radius:999px; color:var(--n0-color-navy); background:var(--n0-color-mist); font-size:.78em; }
     @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(2,minmax(0,1fr)); } .mail-nav button { text-align:center; min-height:44px; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } .mail-toolbar { align-items:flex-start; flex-wrap:wrap; } .mail-toolbar > div { display:flex; flex-wrap:wrap; gap:var(--n0-space-2); } .mail-toolbar button { min-height:44px; } .folder-manager form { flex-direction:column; } .template-filters { grid-template-columns:1fr; } .message-row { grid-template-columns:auto 1fr; gap:4px; } .message-row span, .message-row time { grid-column:2; } .draft-open, .queue-summary { grid-template-columns:1fr; gap:4px; } .draft-row, .queue-row { align-items:stretch; flex-direction:column; } .draft-delete, .queue-cancel { align-self:flex-start; } }
     @media (max-width:480px) { .mail-nav { gap:6px; } .mail-nav button { padding:10px 8px; font-size:.9rem; } .mail-toolbar h2 { width:100%; } .mail-toolbar > div { width:100%; } .mail-toolbar button { flex:1 1 auto; } .auth-gate { margin-bottom:12px; } .mail-empty { padding:24px 14px; } }
+    /* Keep the sign-in view compact enough for a normal laptop viewport. */
+    .webmail-page .app-header { min-height:64px; padding-top:10px; padding-bottom:10px; }
+    .webmail-page .shell { padding-top:28px; padding-bottom:28px; }
+    .webmail-page .intro { margin-bottom:24px; }
+    .webmail-page .auth-gate { padding:24px 32px; }
+    .webmail-page .auth-copy h2 { margin-bottom:12px; }
+    .webmail-page .auth-copy > p:not(.eyebrow) { margin-bottom:16px; }
+    .webmail-page .auth-form { gap:12px; }
+    .webmail-page .auth-form label { gap:5px; }
+    .webmail-page .auth-form input:not([type="checkbox"]) { padding:9px; }
+    .webmail-page .auth-form .button { min-height:40px; }
+    @media (max-width:800px) { .webmail-page .shell { padding-top:20px; padding-bottom:20px; } .webmail-page .auth-gate { padding:20px; } }
   </style>
 </head>
-<body>
+<body class="webmail-page">
   <header class="app-header">
     <div class="brand-lockup"><img src="../assets/brand/N0JCG_Header_Dark_Approved.png" alt="N0JCG Open Radio Platform" class="brand-mark" width="210" height="40"><span class="product-name">Winlink Email Server</span></div>
     <div class="header-context"><a class="header-link" href="../ui/">Operator console</a><button class="header-button" id="logout-button" type="button">Log out</button></div>
