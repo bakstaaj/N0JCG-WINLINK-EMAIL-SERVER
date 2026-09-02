@@ -11,7 +11,7 @@ from n0jcg_licensing import LicenseClient
 PRODUCT_ID = "winlink-email-appliance"
 PRODUCT_NAME = "N0JCG Winlink Email Server"
 LICENSE_PREFIX = "N0JCG-WLA-"
-VERSION = "0.1.6"
+VERSION = "0.1.8"
 DEFAULT_STATE = Path("/var/lib/n0jcg-winlink/registration.json")
 
 

@@ -6,6 +6,11 @@
   const signatureView = document.getElementById('signature-view');
   const signatureForm = signatureView;
   const folderManager = document.getElementById('folder-manager');
+  const contactsView = document.getElementById('contacts-view');
+  const contactForm = document.getElementById('contact-form');
+  const contactList = document.getElementById('contact-list');
+  const contactMessage = document.getElementById('contact-message');
+  const contactOptions = document.getElementById('contact-options');
   const templateView = document.getElementById('template-view');
   let signature = '';
   const authGate = document.getElementById('auth-gate');
@@ -28,6 +33,7 @@
   let loginRetryTimer;
   let loginRetryUntil = 0;
   let redirectingToLogin = false;
+  let returnToCompose = false;
   let currentCallsign = '';
   function updateRegistrationNotice(registration) {
     if (!trialNotice) return;
@@ -210,6 +216,7 @@
     composeView.hidden = true;
     signatureView.hidden = true;
     folderManager.hidden = true;
+    contactsView.hidden = true;
     templateView.hidden = true;
     document.querySelectorAll('[data-folder]').forEach((button) => button.classList.toggle('active', button.dataset.folder === folder));
     loadMessages(folder);
@@ -317,6 +324,7 @@
     folderView.hidden = true;
     signatureView.hidden = true;
     folderManager.hidden = true;
+    contactsView.hidden = true;
     templateView.hidden = true;
     composeView.hidden = false;
     folderTitle.textContent = 'Edit draft';
@@ -360,25 +368,29 @@
     }
   }
 
-  function showCompose() {
+  function showCompose(reset = true) {
     folderView.hidden = true;
     composeView.hidden = false;
     signatureView.hidden = true;
     folderManager.hidden = true;
+    contactsView.hidden = true;
     templateView.hidden = true;
     folderTitle.textContent = 'Compose';
-    composeView.removeAttribute('data-draft-id');
-    composeView.querySelector('input[name="to"]').value = '';
-    composeView.querySelector('input[name="subject"]').value = '';
-    composeView.querySelector('input[name="attachment"]').value = '';
-    document.getElementById('attachment-warning').textContent = '';
-    const body = composeView.querySelector('textarea[name="body"]');
-    body.value = signature ? `\n\n${signature}` : '';
+    if (reset) {
+      composeView.removeAttribute('data-draft-id');
+      composeView.querySelector('input[name="to"]').value = '';
+      composeView.querySelector('input[name="subject"]').value = '';
+      composeView.querySelector('input[name="attachment"]').value = '';
+      document.getElementById('attachment-warning').textContent = '';
+      const body = composeView.querySelector('textarea[name="body"]');
+      body.value = signature ? `\n\n${signature}` : '';
+    }
     composeView.querySelector('input[name="to"]').focus();
+    loadContacts();
   }
 
   async function refreshFolderCounts() {
-    await Promise.allSettled([loadMessages('drafts'), loadMessages('queue'), loadFolders()]);
+    await Promise.allSettled([loadMessages('drafts'), loadMessages('queue'), loadFolders(), loadContacts()]);
     showFolder('inbox');
   }
 
@@ -425,6 +437,7 @@
     composeView.hidden = true;
     signatureView.hidden = false;
     folderManager.hidden = true;
+    contactsView.hidden = true;
     templateView.hidden = true;
     signatureForm.querySelector('textarea').value = signature;
     signatureForm.querySelector('.auth-message').textContent = '';
@@ -444,6 +457,7 @@
     composeView.hidden = true;
     signatureView.hidden = true;
     folderManager.hidden = true;
+    contactsView.hidden = true;
     templateView.hidden = false;
     folderTitle.textContent = 'Templates';
     const content = document.getElementById('template-content');
@@ -504,7 +518,55 @@
     signatureView.hidden = true;
     folderManager.hidden = false;
     templateView.hidden = true;
+    contactsView.hidden = true;
     await loadFolders();
+  }
+
+  async function showContacts() {
+    folderView.hidden = true;
+    composeView.hidden = true;
+    signatureView.hidden = true;
+    folderManager.hidden = true;
+    templateView.hidden = true;
+    contactsView.hidden = false;
+    folderTitle.textContent = 'Address book';
+    if (!returnToCompose) contactForm.reset();
+    contactMessage.textContent = '';
+    await loadContacts();
+  }
+
+  async function loadContacts() {
+    if (!contactList || !contactOptions) return;
+    try {
+      const response = await fetch('/api/v1/account/contacts', { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Address book is unavailable.');
+      const contacts = body.contacts || [];
+      contactOptions.innerHTML = contacts.map((contact) => `<option value="${escapeHtml(contact.email)}" label="${escapeHtml(contact.name || contact.email)}"></option>`).join('');
+      contactList.innerHTML = contacts.length ? contacts.map((contact) => `<article class="contact-row"><div class="contact-details"><strong>${escapeHtml(contact.name || '(no name)')}</strong><span>${escapeHtml(contact.email)}</span>${contact.notes ? `<small>${escapeHtml(contact.notes)}</small>` : ''}</div><div class="contact-actions"><button type="button" class="secondary" data-use-contact="${escapeHtml(contact.email)}">Use</button><button type="button" class="secondary" data-edit-contact="${escapeHtml(contact.id)}">Edit</button><button type="button" class="danger" data-delete-contact="${escapeHtml(contact.id)}">Delete</button></div></article>`).join('') : '<p class="muted">No contacts saved yet.</p>';
+      contactList.querySelectorAll('[data-use-contact]').forEach((button) => button.addEventListener('click', () => {
+        composeView.querySelector('input[name="to"]').value = button.dataset.useContact;
+        returnToCompose = false;
+        showCompose(false);
+      }));
+      contactList.querySelectorAll('[data-edit-contact]').forEach((button) => button.addEventListener('click', () => {
+        const contact = contacts.find((item) => String(item.id) === button.dataset.editContact);
+        if (!contact) return;
+        contactForm.elements.id.value = contact.id;
+        contactForm.elements.name.value = contact.name || '';
+        contactForm.elements.email.value = contact.email || '';
+        contactForm.elements.notes.value = contact.notes || '';
+        contactForm.elements.name.focus();
+      }));
+      contactList.querySelectorAll('[data-delete-contact]').forEach((button) => button.addEventListener('click', async () => {
+        if (!window.confirm('Delete this contact?')) return;
+        const response = await fetch(`/api/v1/account/contacts/${encodeURIComponent(button.dataset.deleteContact)}`, { method: 'DELETE' });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) { contactMessage.textContent = body.error || 'The contact could not be deleted.'; return; }
+        contactMessage.textContent = 'Contact deleted.';
+        await loadContacts();
+      }));
+    } catch (error) { contactList.innerHTML = `<p class="auth-message">${escapeHtml(error.message)}</p>`; }
   }
 
   async function loadFolders() {
@@ -680,8 +742,10 @@
       showSignedInUser(body.callsign);
       scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
-      mailboxBadge.className = 'status-badge status-unknown';
-      mailboxBadge.textContent = `… Mailbox: Connecting - ${body.callsign}`;
+      if (mailboxBadge) {
+        mailboxBadge.className = 'status-badge status-unknown';
+        mailboxBadge.textContent = `… Mailbox: Connecting - ${body.callsign}`;
+      }
       refreshFolderCounts();
       pollMailboxSync();
       scheduleAutomaticSync();
@@ -725,8 +789,10 @@
       showSignedInUser(body.callsign);
       scheduleSessionCheck(body.expires_at);
       try { await loadSignature(); } catch (_) { signature = ''; }
-      mailboxBadge.className = 'status-badge status-unknown';
-      mailboxBadge.textContent = `… Mailbox: Connecting - ${body.callsign}`;
+      if (mailboxBadge) {
+        mailboxBadge.className = 'status-badge status-unknown';
+        mailboxBadge.textContent = `… Mailbox: Connecting - ${body.callsign}`;
+      }
       refreshFolderCounts();
       pollMailboxSync();
       scheduleAutomaticSync();
@@ -764,9 +830,12 @@
   });
   logoutButton.addEventListener('click', logout);
   document.querySelector('[data-action="folders"]').addEventListener('click', showFolderManager);
+  document.querySelector('[data-action="contacts"]').addEventListener('click', showContacts);
+  document.querySelector('[data-action="contacts-from-compose"]').addEventListener('click', () => { returnToCompose = true; showContacts(); });
   document.querySelector('[data-action="templates"]').addEventListener('click', showTemplates);
   document.querySelector('[data-action="cancel-templates"]').addEventListener('click', () => showFolder('inbox'));
   document.querySelector('[data-action="cancel-folders"]').addEventListener('click', () => showFolder('inbox'));
+  document.querySelector('[data-action="cancel-contact"]').addEventListener('click', () => { const compose = returnToCompose; returnToCompose = false; compose ? showCompose(false) : showFolder('inbox'); });
   document.getElementById('folder-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -780,6 +849,18 @@
       message.textContent = 'Folder created.';
       await loadFolders();
     } catch (error) { message.textContent = error.message; }
+  });
+  contactForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(contactForm));
+    try {
+      const response = await fetch('/api/v1/account/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'The contact could not be saved.');
+      contactForm.reset();
+      contactMessage.textContent = 'Contact saved.';
+      await loadContacts();
+    } catch (error) { contactMessage.textContent = error.message; }
   });
   document.querySelectorAll('[data-folder]').forEach((button) => button.addEventListener('click', () => showFolder(button.dataset.folder)));
   document.querySelectorAll('[data-action="compose"]').forEach((button) => button.addEventListener('click', showCompose));

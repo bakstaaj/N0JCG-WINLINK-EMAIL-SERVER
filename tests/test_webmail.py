@@ -28,6 +28,20 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('name="email"', ui)
         self.assertIn("Registered email", ui)
 
+    def test_address_book_is_callsign_scoped_and_available_in_compose(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        ui = (ROOT / "ui" / "webmail" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "ui" / "webmail" / "webmail.js").read_text(encoding="utf-8")
+        self.assertIn("CREATE TABLE IF NOT EXISTS mailbox_contacts", source)
+        self.assertIn("/api/v1/account/contacts", source)
+        self.assertIn("WHERE callsign=?", source)
+        self.assertIn('data-action="contacts"', ui)
+        self.assertIn('id="contacts-view"', ui)
+        self.assertIn('id="contact-options"', ui)
+        self.assertIn("loadContacts()", script)
+        self.assertIn("data-edit-contact", script)
+        self.assertIn("data-delete-contact", script)
+
     def test_trial_download_limit_is_enforced_by_sync_worker(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
         self.assertIn('"download_limit": None if registration["registered"] else 1', source)

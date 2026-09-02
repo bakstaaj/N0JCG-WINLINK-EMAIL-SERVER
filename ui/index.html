@@ -30,8 +30,6 @@
       <article class="card" id="packet-station-card" tabindex="-1"><div class="card-heading"><h2>Packet station</h2><span id="packet-status" class="status status-unknown">Checking…</span></div><form id="radio-profile-form" class="facts"><label>Local packet station ID<input id="packet-callsign" name="packet_callsign" pattern="[A-Za-z0-9-]{3,15}" required></label><label>RMS gateway target<input id="rms-target-input" name="rms_target" pattern="[A-Za-z0-9-]{3,15}" required></label><label>Radio frequency (MHz)<input id="packet-frequency" name="frequency" inputmode="decimal" pattern="[0-9]{2,3}(\.[0-9]{1,6})?" required></label><label>Digipeater path (optional)<input id="digipeater-path" name="digipeater_path" pattern="[A-Za-z0-9-]{3,15}(,[A-Za-z0-9-]{3,15})*" placeholder="blank for direct RMS"></label><label>Automatic mailbox sync (minutes)<input id="auto-sync-minutes" name="auto_sync_minutes" type="number" min="5" max="1440" step="1" required></label><button class="button" type="submit">Save radio profile</button><p id="radio-profile-message" class="muted" role="status"></p></form><p class="muted">The local ID identifies this appliance; the target and frequency identify the selected Packet RMS gateway. A digipeater path is only used when a compatible Winlink Packet digipeater is selected.</p></article>
       <article class="card gateway-card"><div class="card-heading"><h2>Nearby RMS gateways</h2><span id="gateway-status" class="status status-unknown">Checking…</span></div><p id="gateway-location" class="muted">Location unavailable. Connect a USB GPS or enter a manual location.</p><div class="gateway-location-form"><label><span id="latitude-label">Manual latitude</span><input id="sim-latitude" inputmode="decimal" placeholder="e.g. 39.7392"></label><label><span id="longitude-label">Manual longitude</span><input id="sim-longitude" inputmode="decimal" placeholder="e.g. -104.9903"></label><button class="button" id="save-location" type="button">Use simulated location</button><button class="button" id="use-gps" type="button">Use GPS location</button></div><div class="gateway-actions"><button class="button" id="refresh-gateways" type="button">Refresh gateway list</button><span id="gateway-cache-note" class="muted"></span></div><div id="gateway-list" class="gateway-list"><p class="muted">No cached gateway list is installed yet.</p></div><p id="gateway-message" class="muted" role="status">The list is cached on the appliance for field use.</p></article>
     </section>
-    <section class="card next-step"><div><p class="eyebrow">Next safe step</p><h2>Complete pre-radio validation</h2><p>Run software, audio, and configuration checks without enabling transmission.</p></div><a class="button" href="#diagnostics">Open diagnostics</a></section>
-    <section id="diagnostics" class="card"><div class="card-heading"><h2>Diagnostics</h2><div><span id="diagnostic-status" class="status status-unknown">Checking…</span> <button class="header-button diagnostic-refresh" id="diagnostic-refresh" type="button">Refresh</button></div></div><ul id="diagnostic-list" class="checklist"><li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Checking local USB and serial evidence…</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Checking Dire Wolf installation and service state…</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Checking Winlink client installation and service state…</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>Unavailable until the radio is connected.</small></span></li></ul><p id="diagnostic-observed" class="muted"></p></section>
     <section id="audio-calibration" class="card"><div class="card-heading"><h2>Receive-only audio calibration</h2><span id="calibration-status" class="status status-unknown">Stopped</span></div><p class="muted">Noise-floor mode: leave the radio in monitor/open-squelch, then adjust only the WES radio volume. Starting this test pauses Dire Wolf briefly; it never starts Pat, keys PTT, or transmits RF.</p><div class="calibration-metrics"><div><span>Noise-floor quality</span><strong id="calibration-quality">—</strong></div><div><span>Latest peak</span><strong id="calibration-level">—</strong></div><div><span>Average RMS</span><strong id="calibration-average">—</strong></div><div><span>RMS dBFS</span><strong id="calibration-rms">—</strong></div><div><span>Peak dBFS</span><strong id="calibration-peak">—</strong></div></div><button class="button" id="calibration-start" type="button">Start receive test</button> <button class="header-button" id="calibration-stop" type="button" disabled>Stop receive test</button><p id="calibration-guidance" class="muted">Start the test and adjust the radio volume until the noise floor says usable noise floor.</p><pre id="calibration-log" class="calibration-log">No calibration evidence collected.</pre><hr><h3>Automatic RMS receive calibration</h3><p class="muted">Runs up to ten short RMS sessions, displays every packet level and S/N result, and stops at the maximum useful gain; noise alone never increases gain.</p><button class="button" id="autogain-toggle" type="button">Run RMS receive calibration</button><p id="autogain-status" class="muted">Ready to run.</p><pre id="autogain-log" class="calibration-log">No automatic calibration evidence collected.</pre></section>
   </main>
   <footer class="footer">N0JCG Winlink Email Server <span aria-hidden="true">|</span> N0JCG Open Radio Platform</footer>
@@ -158,6 +156,7 @@
       document.getElementById('forms-count').textContent = String(details.count || 0);
     }
     async function refreshDiagnostics() {
+      if (!diagnosticStatus) return;
       diagnosticStatus.textContent = 'Checking…';
       try {
         const response = await fetch('../api/v1/operator/diagnostics', { cache: 'no-store' });
@@ -199,7 +198,7 @@
       diagnosticObserved.textContent = `Observed ${data.observed_at || 'unknown'} from ${data.source || 'local probe'}.`;
       } catch (_) { diagnosticStatus.textContent = 'Unavailable'; diagnosticStatus.className = 'status status-unavailable'; }
     }
-    document.getElementById('diagnostic-refresh').addEventListener('click', refreshDiagnostics);
+    document.getElementById('diagnostic-refresh')?.addEventListener('click', refreshDiagnostics);
     document.getElementById('forms-update').addEventListener('click', async (event) => {
       const button = event.currentTarget;
       const message = document.getElementById('forms-message');
@@ -318,8 +317,10 @@
     loadRegistration();
     loadRadioProfile();
     loadGateways();
-    refreshDiagnostics();
-    window.setInterval(refreshDiagnostics, 30000);
+    if (diagnosticStatus) {
+      refreshDiagnostics();
+      window.setInterval(refreshDiagnostics, 30000);
+    }
   </script>
 </body>
 </html>

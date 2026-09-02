@@ -84,6 +84,7 @@ RADIO_PROFILE_PATH = STATE_DIR / "radio-profile.conf"
 PAT_BASE_CONFIG = os.environ.get("N0JCG_PAT_BASE_CONFIG", "")
 DB_PATH = STATE_DIR / "webmail.sqlite3"
 EMAIL_RE = re.compile(r"^([A-Z0-9][A-Z0-9-]{2,15})@winlink\.org$", re.I)
+CONTACT_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.I)
 FAILURE_RE = re.compile(r"secure login failed|authentication failed|login failed|invalid password|unknown callsign|does not match login callsign", re.I)
 SUCCESS_RE = re.compile(r"CMS>|WL2K-|Remote accepted|B2F", re.I)
 SESSIONS = {}
@@ -116,6 +117,7 @@ def init_db():
     with sqlite3.connect(DB_PATH) as db:
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_accounts (email TEXT PRIMARY KEY, callsign TEXT NOT NULL, first_validated_at INTEGER NOT NULL, last_validated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_signatures (callsign TEXT PRIMARY KEY, signature TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS mailbox_contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', email TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(callsign,email))")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, recipient TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, attachment_name TEXT NOT NULL DEFAULT '', attachment_type TEXT NOT NULL DEFAULT '', attachment_data BLOB NOT NULL DEFAULT '', state TEXT NOT NULL, created_at INTEGER NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS mailbox_folders (id INTEGER PRIMARY KEY AUTOINCREMENT, callsign TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(callsign,name))")
@@ -1475,6 +1477,40 @@ class Handler(BaseHTTPRequestHandler):
                     db.commit()
                 self.send_json(HTTPStatus.OK, {"saved": True, "signature": signature})
                 return
+            if self.path == "/api/v1/account/contacts":
+                session = session_from(self)
+                if not session:
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                    return
+                contact_id = data.get("id")
+                name = str(data.get("name") or "").strip()
+                email = str(data.get("email") or "").strip().lower()
+                notes = str(data.get("notes") or "").strip()
+                if not email or not CONTACT_EMAIL_RE.fullmatch(email):
+                    raise ValueError("enter a valid contact email address")
+                if len(name) > 120 or len(email) > 320 or len(notes) > 500:
+                    raise ValueError("contact fields exceed the allowed length")
+                now = int(time.time())
+                with sqlite3.connect(DB_PATH) as db:
+                    if contact_id:
+                        try:
+                            cursor = db.execute("UPDATE mailbox_contacts SET name=?,email=?,notes=?,updated_at=? WHERE id=? AND callsign=?", (name, email, notes, now, int(contact_id), session["callsign"]))
+                        except sqlite3.IntegrityError:
+                            self.send_json(HTTPStatus.CONFLICT, {"error": "that email address is already in the address book"})
+                            return
+                        if cursor.rowcount == 0:
+                            self.send_json(HTTPStatus.NOT_FOUND, {"error": "contact not found"})
+                            return
+                    else:
+                        try:
+                            cursor = db.execute("INSERT INTO mailbox_contacts(callsign,name,email,notes,created_at,updated_at) VALUES(?,?,?,?,?,?)", (session["callsign"], name, email, notes, now, now))
+                            contact_id = cursor.lastrowid
+                        except sqlite3.IntegrityError:
+                            self.send_json(HTTPStatus.CONFLICT, {"error": "that email address is already in the address book"})
+                            return
+                    db.commit()
+                self.send_json(HTTPStatus.OK, {"saved": True, "contact": {"id": int(contact_id), "name": name, "email": email, "notes": notes, "updated_at": now}})
+                return
             if self.path == "/api/v1/mail/drafts":
                 session = session_from(self)
                 if not session:
@@ -1724,6 +1760,14 @@ class Handler(BaseHTTPRequestHandler):
                 row = db.execute("SELECT signature FROM mailbox_signatures WHERE callsign=?", (session["callsign"],)).fetchone()
             self.send_json(HTTPStatus.OK, {"callsign": session["callsign"], "signature": row[0] if row else ""})
             return
+        if self.path == "/api/v1/account/contacts":
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                rows = db.execute("SELECT id,name,email,notes,created_at,updated_at FROM mailbox_contacts WHERE callsign=? ORDER BY name COLLATE NOCASE,email COLLATE NOCASE", (session["callsign"],)).fetchall()
+            self.send_json(HTTPStatus.OK, {"callsign": session["callsign"], "contacts": [{"id": row[0], "name": row[1], "email": row[2], "notes": row[3], "created_at": row[4], "updated_at": row[5]} for row in rows]})
+            return
         if self.path == "/api/v1/mail/drafts":
             if not session:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
@@ -1780,6 +1824,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         session = session_from(self)
+        contact_prefix = "/api/v1/account/contacts/"
+        if self.path.startswith(contact_prefix):
+            if not session:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
+                return
+            contact_id = self.path[len(contact_prefix):]
+            if not contact_id.isdigit():
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid contact id"})
+                return
+            with sqlite3.connect(DB_PATH) as db:
+                cursor = db.execute("DELETE FROM mailbox_contacts WHERE id=? AND callsign=?", (int(contact_id), session["callsign"]))
+                db.commit()
+            if cursor.rowcount == 0:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "contact not found"})
+            else:
+                self.send_json(HTTPStatus.OK, {"deleted": True})
+            return
         folder_prefix = "/api/v1/mail/folders/"
         if self.path.startswith(folder_prefix):
             if not session:

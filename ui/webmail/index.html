@@ -101,12 +101,25 @@
     .template-fields input { padding:10px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
     .folder-manager form { display:flex; gap:var(--n0-space-2); }
     .folder-manager input { flex:1; padding:10px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; }
+    .contacts-view { display:grid; gap:var(--n0-space-3); }
+    .contact-form { display:grid; gap:var(--n0-space-3); padding:14px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); background:var(--n0-color-mist); }
+    .contact-form label { display:grid; gap:5px; color:var(--n0-color-text-muted); font-size:.88rem; font-weight:700; }
+    .contact-form input, .contact-form textarea { min-width:0; padding:10px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); font:inherit; background:var(--n0-color-white); }
+    .contact-list { display:grid; gap:var(--n0-space-2); }
+    .contact-row { display:flex; align-items:center; justify-content:space-between; gap:var(--n0-space-3); padding:12px; border:1px solid var(--n0-color-border); border-radius:var(--n0-radius-sm); background:var(--n0-color-white); }
+    .contact-details { min-width:0; display:grid; gap:3px; }
+    .contact-details strong, .contact-details span, .contact-details small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .contact-details span, .contact-details small { color:var(--n0-color-text-muted); }
+    .contact-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .recipient-entry { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
+    .recipient-entry button { white-space:nowrap; }
+    .visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
     .custom-folder-row { display:flex; align-items:center; justify-content:space-between; gap:var(--n0-space-3); padding:10px 0; border-top:1px solid #e9edf2; }
     .custom-folder-nav { display:grid; gap:var(--n0-space-2); margin:0 0 var(--n0-space-2) var(--n0-space-4); }
     .custom-folder-nav button { border:0; padding:7px 8px; color:var(--n0-color-text-muted); background:transparent; text-align:left; font:inherit; cursor:pointer; }
     .custom-folder-nav button:hover { color:var(--n0-color-blue); }
     .folder-count { display:inline-grid; min-width:1.5em; min-height:1.5em; place-items:center; margin-left:4px; padding:0 4px; border-radius:999px; color:var(--n0-color-navy); background:var(--n0-color-mist); font-size:.78em; }
-    @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(2,minmax(0,1fr)); } .mail-nav button { text-align:center; min-height:44px; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } .mail-toolbar { align-items:flex-start; flex-wrap:wrap; } .mail-toolbar > div { display:flex; flex-wrap:wrap; gap:var(--n0-space-2); } .mail-toolbar button { min-height:44px; } .folder-manager form { flex-direction:column; } .template-filters { grid-template-columns:1fr; } .message-row { grid-template-columns:auto 1fr; gap:4px; } .message-row span, .message-row time { grid-column:2; } .draft-open, .queue-summary { grid-template-columns:1fr; gap:4px; } .draft-row, .queue-row { align-items:stretch; flex-direction:column; } .draft-delete, .queue-cancel { align-self:flex-start; } }
+    @media (max-width:800px) { .mail-layout { grid-template-columns:1fr; } .mail-nav { grid-template-columns:repeat(2,minmax(0,1fr)); } .mail-nav button { text-align:center; min-height:44px; } .mail-table { font-size:.88rem; } .mail-table th:nth-child(3), .mail-table td:nth-child(3) { display:none; } .mail-toolbar { align-items:flex-start; flex-wrap:wrap; } .mail-toolbar > div { display:flex; flex-wrap:wrap; gap:var(--n0-space-2); } .mail-toolbar button { min-height:44px; } .folder-manager form { flex-direction:column; } .template-filters { grid-template-columns:1fr; } .message-row { grid-template-columns:auto 1fr; gap:4px; } .message-row span, .message-row time { grid-column:2; } .draft-open, .queue-summary { grid-template-columns:1fr; gap:4px; } .draft-row, .queue-row { align-items:stretch; flex-direction:column; } .draft-delete, .queue-cancel { align-self:flex-start; } .contact-row { align-items:stretch; flex-direction:column; } .contact-actions { justify-content:flex-start; } .recipient-entry { grid-template-columns:1fr; } }
     @media (max-width:480px) { .mail-nav { gap:6px; } .mail-nav button { padding:10px 8px; font-size:.9rem; } .mail-toolbar h2 { width:100%; } .mail-toolbar > div { width:100%; } .mail-toolbar button { flex:1 1 auto; } .auth-gate { margin-bottom:12px; } .mail-empty { padding:24px 14px; } }
     /* Keep the sign-in view compact enough for a normal laptop viewport. */
     .webmail-page .app-header { min-height:56px; padding-top:6px; padding-bottom:6px; }
@@ -133,8 +146,8 @@
   </header>
   <main class="shell">
     <section class="intro" aria-labelledby="mail-title">
-      <div><p class="eyebrow">N0JCG Open Radio Platform</p><h1 id="mail-title">Webmail<span id="mail-user" aria-label="signed-in callsign"></span></h1><p class="lede">Compose and manage Winlink messages through the client appliance mailbox.</p><p id="trial-notice" class="trial-notice" role="status" hidden>Trial: Limited to one message per login.</p></div>
-      <div class="status-badge status-unavailable" role="status"><span aria-hidden="true">!</span> Mailbox: Not connected</div>
+      <div><h1 id="mail-title" class="visually-hidden">Webmail<span id="mail-user" aria-label="signed-in callsign"></span></h1><p id="trial-notice" class="trial-notice" role="status" hidden>Trial: Limited to one message per login.</p></div>
+      <div aria-hidden="true"></div>
     </section>
     <section id="auth-gate" class="card auth-gate" aria-labelledby="auth-title">
       <div class="auth-copy"><p class="eyebrow">Winlink mailbox access</p><h2 id="auth-title">Sign in with Winlink</h2><p>Use your Winlink callsign and secure-login password. The Winlink mailbox domain is added automatically. A first login initializes an isolated mailbox for that callsign.</p></div>
@@ -149,6 +162,7 @@
         <button data-folder="queue">Send queue <span class="folder-count" aria-label="0 queued messages">0</span></button>
         <button data-action="compose">Compose</button>
         <button data-action="folders">Manage folders</button>
+        <button data-action="contacts">Address book</button>
       </nav>
       <section class="card mail-panel" aria-live="polite">
         <div class="mail-toolbar"><h2 id="folder-title">Inbox</h2><div><button type="button" data-action="refresh">Refresh</button></div></div>
@@ -156,10 +170,11 @@
         <div id="folder-view" class="mail-empty"><strong>No mailbox connection</strong><p>The Winlink client is installed but not connected to a mailbox yet. Configure the Packet RMS gateway and start the client service from the operator console before expecting messages here.</p></div>
         <form id="signature-view" class="signature-view" hidden><h3>Email signature</h3><p class="muted">This signature is saved separately for your authenticated Winlink callsign and added to new messages.</p><textarea name="signature" maxlength="2000" placeholder="73,\nYOURCALL"></textarea><p class="auth-message" role="status"></p><div class="compose-actions"><button type="submit">Save signature</button><button type="button" class="secondary" data-action="cancel-signature">Cancel</button></div></form>
         <section id="folder-manager" class="folder-manager" hidden><h3>Manage folders</h3><p class="muted">Create folders for this Winlink account. Built-in mailbox folders cannot be deleted.</p><form id="folder-form"><input name="name" maxlength="40" placeholder="Folder name" required><button type="submit">Create folder</button></form><p id="folder-message" class="auth-message" role="status"></p><div id="custom-folder-list"></div><button type="button" class="secondary" data-action="cancel-folders">Done</button></section>
+        <section id="contacts-view" class="contacts-view" hidden><h3>Address book</h3><p class="muted">Contacts are saved separately for the signed-in Winlink account and are available when composing messages.</p><form id="contact-form" class="contact-form"><input name="id" type="hidden"><label>Name<input name="name" maxlength="120" autocomplete="name" placeholder="Optional display name"></label><label>Email<input name="email" type="email" maxlength="320" autocomplete="email" placeholder="recipient@example.net" required></label><label>Notes<textarea name="notes" maxlength="500" rows="2" placeholder="Optional note"></textarea></label><div class="compose-actions"><button type="submit">Save contact</button><button type="button" class="secondary" data-action="cancel-contact">Cancel</button></div><p id="contact-message" class="auth-message" role="status"></p></form><div id="contact-list" class="contact-list"></div></section>
         <section id="template-view" class="template-view" hidden><h3>Winlink Standard Forms</h3><p class="muted">Choose an official form, complete its fields, and insert an editable plain-text message. The operator must install or update the Standard Forms library first.</p><div id="template-content" class="mail-empty">Loading templates…</div><button type="button" class="secondary" data-action="cancel-templates">Done</button></section>
         <form id="compose-view" class="compose" hidden>
           <div class="compose-top-actions"><button type="button" class="secondary" data-action="templates">Choose template</button><button type="button" class="secondary" data-action="signature">Signature</button></div>
-          <label>To<input name="to" type="email" autocomplete="email" placeholder="recipient@example.net" required></label>
+          <label>To<div class="recipient-entry"><input name="to" type="email" list="contact-options" autocomplete="email" placeholder="recipient@example.net" required><button type="button" class="secondary" data-action="contacts-from-compose">Contacts</button></div><datalist id="contact-options"></datalist></label>
           <label>Subject<input name="subject" maxlength="160" required></label>
           <label>Message<textarea name="body" maxlength="10000" required></textarea></label>
           <label>Attachment<input name="attachment" type="file" accept="*/*"><small id="attachment-warning" class="attachment-warning" role="status"></small></label>
