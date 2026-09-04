@@ -53,6 +53,10 @@ fi
 
 sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
 sudo install -d -m 0755 "$APP_ROOT/api" "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink /var/lib/n0jcg-winlink-webmail
+# Ubuntu-based images, including Orange Pi images, may not create Debian's
+# optional Nginx site directories. Create them before installing the site and
+# snippet configuration so first deployment works on either layout.
+sudo install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets
 sudo chown "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink
 sudo install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.local/state/pat"
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
