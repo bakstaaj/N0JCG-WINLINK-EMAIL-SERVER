@@ -47,6 +47,20 @@ if [[ "${1:-}" == "--check-only" ]]; then
     exit 0
 fi
 
+if ! command -v nginx >/dev/null 2>&1; then
+    if ! command -v apt-get >/dev/null 2>&1; then
+        echo "FAIL: Nginx is not installed and this system has no supported apt package manager" >&2
+        exit 1
+    fi
+    echo "Nginx is not installed; installing it for the Webmail service."
+    sudo apt-get update
+    sudo apt-get install -y nginx
+fi
+if ! command -v systemctl >/dev/null 2>&1; then
+    echo "FAIL: systemd is required to run the WES services" >&2
+    exit 1
+fi
+
 if [[ ! -f /etc/n0jcg-winlink/network.conf ]]; then
     INITIAL_CONNECTIVITY=1
 fi
@@ -57,6 +71,7 @@ sudo install -d -m 0755 "$APP_ROOT/api" "$APP_ROOT/config" "$APP_ROOT/tools" /va
 # optional Nginx site directories. Create them before installing the site and
 # snippet configuration so first deployment works on either layout.
 sudo install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets
+sudo systemctl enable --now nginx
 sudo chown "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink
 sudo install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.local/state/pat"
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
