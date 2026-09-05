@@ -14,6 +14,7 @@ AUTH_OPTION="${3:-}"
 INSTALL_OPTIONS=()
 CONNECTIVITY_ENV_FILE=""
 REMOTE_CONNECTIVITY_ENV="$REMOTE_ROOT/connectivity.env"
+CONNECTIVITY_REQUIRED=0
 
 if [[ -z "$PI_IP" ]]; then
     printf '%s' 'Raspberry Pi IP address [192.168.68.149]: '
@@ -48,7 +49,15 @@ cleanup_connectivity_env() {
 }
 trap cleanup_connectivity_env EXIT
 
-if printf '%s\n' "${INSTALL_OPTIONS[@]}" | grep -qx -- '--configure-connectivity'; then
+if ! sshpass -e ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "test -f /etc/n0jcg-winlink/network.conf" >/dev/null 2>&1; then
+    CONNECTIVITY_REQUIRED=1
+    echo "INFO: no existing connectivity configuration found; initial hotspot setup is required."
+fi
+
+if printf '%s\n' "${INSTALL_OPTIONS[@]}" | grep -qx -- '--configure-connectivity' || [[ "$CONNECTIVITY_REQUIRED" == "1" ]]; then
+    if ! printf '%s\n' "${INSTALL_OPTIONS[@]}" | grep -qx -- '--configure-connectivity'; then
+        INSTALL_OPTIONS+=(--configure-connectivity)
+    fi
     printf 'Fallback hotspot SSID [N0JCG-WES]: '
     read -r N0JCG_AP_SSID
     N0JCG_AP_SSID="${N0JCG_AP_SSID:-N0JCG-WES}"
