@@ -198,3 +198,5 @@ fi
 
 echo "PASS: N0JCG Winlink Email Server installed at http://$(hostname -I | awk '{print $1}')/webmail/"
 echo "INFO: operator console is available at http://$(hostname -I | awk '{print $1}')/ui/"
+echo "INFO: installation complete; scheduling a system reboot."
+sudo systemd-run --quiet --unit="n0jcg-wes-install-reboot-$(date +%s)" --on-active=5s /usr/bin/systemctl reboot

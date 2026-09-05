@@ -192,6 +192,14 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("proxy_read_timeout 240s", source)
         self.assertIn("proxy_send_timeout 240s", source)
 
+    def test_deployment_reboots_and_verifies_service_after_return(self):
+        installer = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
+        deployer = (ROOT / "deploy" / "push_to_pi.sh").read_text(encoding="utf-8")
+        self.assertIn("systemd-run", installer)
+        self.assertIn("systemctl reboot", installer)
+        self.assertIn("waiting for the Pi to reboot", deployer)
+        self.assertIn("verified after reboot", deployer)
+
     def test_common_pat_failures_have_actionable_explanations(self):
         self.assertIn("Verify the RMS target, frequency, 1200-AFSK mode", MODULE.meaningful_pat_error("Unable to establish connection to remote: port closed"))
         self.assertIn("secure login stage completed", MODULE.meaningful_pat_error("Exchange failed: connection lost", "mailbox_index"))

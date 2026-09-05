@@ -56,6 +56,7 @@ N0JCG_PAT_CONNECT_URL=ax25+agwpe:///${DIGIPEATER_PATH:+$DIGIPEATER_PATH/}$RMS_TA
 EOF
 chmod 0644 "$CONFIG_FILE" "$PROFILE_FILE"
 chown "${N0JCG_APP_USER:-pi}:${N0JCG_APP_USER:-pi}" "$PROFILE_FILE"
+systemctl daemon-reload
+systemctl restart n0jcg-direwolf.service
 echo "PASS: 1200-baud AFSK profile created for $CALLSIGN at $FREQUENCY MHz"
-echo "INFO: receive-only validation: timeout 15s arecord -D plughw:Device,0 -f S16_LE -r 44100 -c 1 -t raw | direwolf -c $CONFIG_FILE -t 0"
-echo "INFO: Dire Wolf service remains inactive until receive validation is complete."
+echo "PASS: Dire Wolf restarted with the new packet configuration"

@@ -95,5 +95,18 @@ printf '%s\n' "$N0JCG_PI_PASSWORD" | sshpass -e ssh -o StrictHostKeyChecking=acc
 if [[ -n "$CONNECTIVITY_ENV_FILE" ]]; then
     sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "rm -f '$REMOTE_CONNECTIVITY_ENV'"
 fi
-sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "grep -q PAT_TELNET_URL /opt/n0jcg-winlink/api/n0jcg_webmail.py && systemctl is-active --quiet n0jcg-webmail.service && echo 'PASS: deployed API and active service verified'"
+echo "INFO: waiting for the Pi to reboot and return online..."
+verified=0
+for attempt in {1..30}; do
+    if sshpass -e ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "grep -q PAT_TELNET_URL /opt/n0jcg-winlink/api/n0jcg_webmail.py && systemctl is-active --quiet n0jcg-webmail.service" >/dev/null 2>&1; then
+        verified=1
+        break
+    fi
+    sleep 2
+done
+if [[ "$verified" != "1" ]]; then
+    echo "FAIL: Pi did not return with an active Webmail service after reboot" >&2
+    exit 1
+fi
+echo "PASS: deployed API and active service verified after reboot"
 unset N0JCG_PI_PASSWORD SSHPASS
