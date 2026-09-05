@@ -98,7 +98,7 @@ sudo install -d -m 0755 "$APP_ROOT/api" "$APP_ROOT/config" "$APP_ROOT/tools" /va
 sudo install -d -m 0755 /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets
 sudo systemctl enable --now nginx
 sudo chown "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink
-sudo install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.local/state/pat"
+sudo install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.local/state/pat" "/home/$APP_USER/.config/pat" "/home/$APP_USER/.local/share/pat"
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/ui/styles.css"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/styles.css"
@@ -144,6 +144,7 @@ sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools
 sudo install -m 0755 "$REPO_ROOT/tools/wes_direwolf_autogain.py" /usr/local/sbin/n0jcg-wes-direwolf-autogain
 sudo install -m 0755 "$REPO_ROOT/tools/wes_audio_tee.py" /usr/local/sbin/n0jcg-wes-audio-tee
 sudo install -m 0755 "$REPO_ROOT/tools/wes_apply_gain.py" /usr/local/sbin/n0jcg-wes-apply-gain
+sudo install -m 0755 "$REPO_ROOT/tools/wes_audio_device.py" /usr/local/sbin/n0jcg-wes-audio-device
 sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tools/agwpe_identity_bridge.py"
 # Normalize the service helpers after their final installation location is set.
 for helper in /usr/local/sbin/n0jcg-wes-* "$APP_ROOT"/tools/*.py "$APP_ROOT"/tools/*.sh; do
@@ -172,13 +173,21 @@ elif [[ ! -x /usr/local/bin/pat ]] || ! /usr/local/bin/pat version 2>/dev/null |
     sudo install -m 0755 "$PAT_BINARY" /usr/local/bin/pat
 fi
 sudo /usr/local/bin/pat version
+if ! command -v direwolf >/dev/null 2>&1; then
+    echo "Dire Wolf is not installed; installing the packet modem."
+    sudo apt-get update
+    sudo apt-get install -y direwolf
+fi
+DIREWOLF_BIN="$(command -v direwolf)"
+[[ -x "$DIREWOLF_BIN" ]] || { echo "FAIL: Dire Wolf binary is not executable" >&2; exit 1; }
+echo "PASS: Dire Wolf available at $DIREWOLF_BIN"
 sudo install -m 0644 "$REPO_ROOT/config/direwolf-n0jcg.conf.example" "$APP_ROOT/config/direwolf-n0jcg.conf.example"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-direwolf.service" "$APP_ROOT/tools/n0jcg-direwolf.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" "$APP_ROOT/tools/n0jcg-agwpe-identity-bridge.service"
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" | sudo tee /etc/systemd/system/n0jcg-agwpe-identity-bridge.service >/dev/null
-sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-direwolf.service" | sudo tee /etc/systemd/system/n0jcg-direwolf.service >/dev/null
+sed -e "s/@APP_USER@/$APP_USER/g" -e "s#@DIREWOLF_BIN@#$DIREWOLF_BIN#g" "$REPO_ROOT/deploy/n0jcg-direwolf.service" | sudo tee /etc/systemd/system/n0jcg-direwolf.service >/dev/null
 printf '%s ALL=(root) NOPASSWD: %s/tools/apply_radio_profile.sh\n' "$APP_USER" "$APP_ROOT" | sudo tee /etc/sudoers.d/n0jcg-radio-profile >/dev/null
 sudo chmod 0440 /etc/sudoers.d/n0jcg-radio-profile
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"

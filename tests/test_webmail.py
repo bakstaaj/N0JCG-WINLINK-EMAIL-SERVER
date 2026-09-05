@@ -200,6 +200,25 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("waiting for the Pi to reboot", deployer)
         self.assertIn("verified after reboot", deployer)
 
+    def test_installer_installs_and_resolves_direwolf_binary(self):
+        installer = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
+        service = (ROOT / "deploy" / "n0jcg-direwolf.service").read_text(encoding="utf-8")
+        self.assertIn("apt-get install -y direwolf", installer)
+        self.assertIn('DIREWOLF_BIN="$(command -v direwolf)"', installer)
+        self.assertIn("@DIREWOLF_BIN@", service)
+
+    def test_direwolf_audio_is_runtime_resolved_and_gain_is_nonfatal(self):
+        service = (ROOT / "deploy" / "n0jcg-direwolf.service").read_text(encoding="utf-8")
+        installer = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
+        gain = (ROOT / "tools" / "wes_apply_gain.py").read_text(encoding="utf-8")
+        resolver = (ROOT / "tools" / "wes_audio_device.py").read_text(encoding="utf-8")
+        self.assertIn("n0jcg-wes-audio-device", service)
+        self.assertIn('RUNTIME_CONF="/run/n0jcg-winlink/direwolf.conf"', service)
+        self.assertNotIn("amixer -c Device", service)
+        self.assertIn("wes_audio_device.py", installer)
+        self.assertIn("except (OSError, subprocess.CalledProcessError)", gain)
+        self.assertIn("no ALSA capture cards", resolver)
+
     def test_connectivity_setup_detects_netplan_renderer_and_wifi_device(self):
         setup = (ROOT / "deploy" / "setup_connectivity.sh").read_text(encoding="utf-8")
         fallback = (ROOT / "deploy" / "n0jcg-network-fallback.sh").read_text(encoding="utf-8")
@@ -233,6 +252,9 @@ class WebmailHelpersTests(unittest.TestCase):
         service = (ROOT / "deploy" / "n0jcg-webmail.service").read_text(encoding="utf-8")
         self.assertIn("ProtectSystem=strict", service)
         self.assertIn("ReadWritePaths=/etc/n0jcg-winlink", service)
+        self.assertIn("ReadWritePaths=/var/lib/n0jcg-winlink-webmail/mailbox", service)
+        self.assertIn("ReadWritePaths=/home/@APP_USER@/.config/pat", service)
+        self.assertIn("ReadWritePaths=/home/@APP_USER@/.local/share/pat", service)
 
     def test_radio_profile_returns_actionable_apply_errors(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
@@ -243,6 +265,11 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("remount,rw /", script)
         self.assertIn('mkdir -p "$CONFIG_DIR"', script)
         self.assertIn('for attempt in 1 2 3', script)
+        self.assertIn('systemctl enable --now n0jcg-direwolf.service', script)
+
+    def test_packet_profile_enables_direwolf_persistently(self):
+        script = (ROOT / "deploy" / "configure_packet_radio.sh").read_text(encoding="utf-8")
+        self.assertIn("systemctl enable --now n0jcg-direwolf.service", script)
 
     def test_common_pat_failures_have_actionable_explanations(self):
         self.assertIn("Verify the RMS target, frequency, 1200-AFSK mode", MODULE.meaningful_pat_error("Unable to establish connection to remote: port closed"))

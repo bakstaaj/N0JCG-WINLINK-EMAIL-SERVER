@@ -11,8 +11,7 @@ Group=@APP_USER@
 SupplementaryGroups=audio input dialout
 RuntimeDirectory=n0jcg-winlink
 ExecStartPre=/usr/local/sbin/n0jcg-wes-apply-gain
-ExecStartPre=/usr/bin/amixer -c Device cset numid=9 0
-ExecStart=/bin/bash -o pipefail -c '/usr/bin/arecord -D plughw:Device,0 -f S16_LE -r 44100 -c 1 -t raw | /usr/local/sbin/n0jcg-wes-audio-tee | /usr/bin/direwolf -c /etc/n0jcg-winlink/direwolf.conf -t 0'
+ExecStart=/bin/bash -o pipefail -c 'AUDIO_DEVICE=$(/usr/local/sbin/n0jcg-wes-audio-device) || exit 1; AUDIO_CARD=$(/usr/local/sbin/n0jcg-wes-audio-device --card) || exit 1; /usr/bin/amixer -c "$AUDIO_CARD" cset numid=9 0 >/dev/null 2>&1 || true; RUNTIME_CONF="/run/n0jcg-winlink/direwolf.conf"; sed "s#^ADEVICE stdin.*#ADEVICE stdin $AUDIO_DEVICE#" /etc/n0jcg-winlink/direwolf.conf > "$RUNTIME_CONF"; /usr/bin/arecord -D "$AUDIO_DEVICE" -f S16_LE -r 44100 -c 1 -t raw | /usr/local/sbin/n0jcg-wes-audio-tee | @DIREWOLF_BIN@ -c "$RUNTIME_CONF" -t 0'
 # Dire Wolf can exit cleanly after a USB/audio-device SIGHUP. The packet
 # bridge still remains up in that case, so always restart the modem unless an
 # operator explicitly stops the unit.

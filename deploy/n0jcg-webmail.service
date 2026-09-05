@@ -14,8 +14,11 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/var/lib/n0jcg-winlink-webmail
+ReadWritePaths=/var/lib/n0jcg-winlink-webmail/mailbox
 ReadWritePaths=/var/lib/n0jcg-winlink
 ReadWritePaths=/home/@APP_USER@/.local/state/pat
+ReadWritePaths=/home/@APP_USER@/.config/pat
+ReadWritePaths=/home/@APP_USER@/.local/share/pat
 ReadWritePaths=/etc/n0jcg-winlink
 Environment=N0JCG_WEBMAIL_STATE_DIR=/var/lib/n0jcg-winlink-webmail
 EnvironmentFile=-/var/lib/n0jcg-winlink-webmail/radio-profile.conf
