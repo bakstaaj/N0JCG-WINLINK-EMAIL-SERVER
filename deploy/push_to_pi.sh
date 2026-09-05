@@ -15,6 +15,9 @@ INSTALL_OPTIONS=()
 CONNECTIVITY_ENV_FILE=""
 REMOTE_CONNECTIVITY_ENV="$REMOTE_ROOT/connectivity.env"
 CONNECTIVITY_REQUIRED=0
+AUTH_ENV_FILE=""
+REMOTE_AUTH_ENV="$REMOTE_ROOT/operator-auth.env"
+AUTH_REQUIRED=0
 
 if [[ -z "$PI_IP" ]]; then
     printf '%s' 'Raspberry Pi IP address [192.168.68.149]: '
@@ -44,10 +47,35 @@ for option in "${3:-}" "${4:-}"; do
 done
 
 cleanup_connectivity_env() {
-    [[ -z "$CONNECTIVITY_ENV_FILE" ]] && return 0
-    rm -f "$CONNECTIVITY_ENV_FILE"
+    [[ -z "$CONNECTIVITY_ENV_FILE" ]] || rm -f "$CONNECTIVITY_ENV_FILE"
+    [[ -z "$AUTH_ENV_FILE" ]] || rm -f "$AUTH_ENV_FILE"
 }
 trap cleanup_connectivity_env EXIT
+
+if ! sshpass -e ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "test -f /etc/nginx/.htpasswd-n0jcg-winlink" >/dev/null 2>&1; then
+    AUTH_REQUIRED=1
+    echo "INFO: no operator authentication configuration found; initial operator setup is required."
+fi
+
+if printf '%s\n' "${INSTALL_OPTIONS[@]}" | grep -qx -- '--configure-operator-auth' || [[ "$AUTH_REQUIRED" == "1" ]]; then
+    printf 'Operator username [operator]: '
+    read -r N0JCG_OPERATOR_USER
+    N0JCG_OPERATOR_USER="${N0JCG_OPERATOR_USER:-operator}"
+    printf "Password for operator '%s': " "$N0JCG_OPERATOR_USER"
+    read -r -s N0JCG_OPERATOR_PASSWORD
+    echo
+    printf "Confirm password for operator '%s': " "$N0JCG_OPERATOR_USER"
+    read -r -s N0JCG_OPERATOR_PASSWORD_CONFIRM
+    echo
+    [[ -n "$N0JCG_OPERATOR_PASSWORD" ]] || { echo "FAIL: operator password cannot be empty" >&2; exit 1; }
+    [[ "$N0JCG_OPERATOR_PASSWORD" == "$N0JCG_OPERATOR_PASSWORD_CONFIRM" ]] || { echo "FAIL: operator passwords did not match" >&2; exit 1; }
+    AUTH_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/n0jcg-operator-auth.XXXXXX")"
+    {
+        printf 'OPERATOR_USER=%q\n' "$N0JCG_OPERATOR_USER"
+        printf 'OPERATOR_PASSWORD=%q\n' "$N0JCG_OPERATOR_PASSWORD"
+    } > "$AUTH_ENV_FILE"
+    chmod 600 "$AUTH_ENV_FILE"
+fi
 
 if ! sshpass -e ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "test -f /etc/n0jcg-winlink/network.conf" >/dev/null 2>&1; then
     CONNECTIVITY_REQUIRED=1
@@ -94,15 +122,24 @@ sshpass -e scp -o StrictHostKeyChecking=accept-new -r \
 if [[ -n "$CONNECTIVITY_ENV_FILE" ]]; then
     sshpass -e scp -o StrictHostKeyChecking=accept-new "$CONNECTIVITY_ENV_FILE" "$REMOTE_HOST:$REMOTE_CONNECTIVITY_ENV"
 fi
+if [[ -n "$AUTH_ENV_FILE" ]]; then
+    sshpass -e scp -o StrictHostKeyChecking=accept-new "$AUTH_ENV_FILE" "$REMOTE_HOST:$REMOTE_AUTH_ENV"
+fi
 
 REMOTE_INSTALL_ARGS="${INSTALL_OPTIONS[*]:-}"
-REMOTE_CONNECTIVITY_ENV_ARG=""
+REMOTE_ENV_ARGS=""
 if [[ -n "$CONNECTIVITY_ENV_FILE" ]]; then
-    REMOTE_CONNECTIVITY_ENV_ARG="N0JCG_CONNECTIVITY_ENV='$REMOTE_CONNECTIVITY_ENV'"
+    REMOTE_ENV_ARGS="N0JCG_CONNECTIVITY_ENV='$REMOTE_CONNECTIVITY_ENV'"
 fi
-printf '%s\n' "$N0JCG_PI_PASSWORD" | sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "sudo -S -p '' env $REMOTE_CONNECTIVITY_ENV_ARG bash '$REMOTE_ROOT/deploy/install_static_ui.sh' $REMOTE_INSTALL_ARGS"
+if [[ -n "$AUTH_ENV_FILE" ]]; then
+    REMOTE_ENV_ARGS="$REMOTE_ENV_ARGS N0JCG_OPERATOR_AUTH_ENV='$REMOTE_AUTH_ENV'"
+fi
+printf '%s\n' "$N0JCG_PI_PASSWORD" | sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "sudo -S -p '' env $REMOTE_ENV_ARGS bash '$REMOTE_ROOT/deploy/install_static_ui.sh' $REMOTE_INSTALL_ARGS"
 if [[ -n "$CONNECTIVITY_ENV_FILE" ]]; then
     sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "rm -f '$REMOTE_CONNECTIVITY_ENV'"
+fi
+if [[ -n "$AUTH_ENV_FILE" ]]; then
+    sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "rm -f '$REMOTE_AUTH_ENV'"
 fi
 echo "INFO: waiting for the Pi to reboot and return online..."
 verified=0

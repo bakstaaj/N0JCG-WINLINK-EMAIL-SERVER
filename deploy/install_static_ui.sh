@@ -191,7 +191,11 @@ if [[ ! -f /etc/nginx/.htpasswd-n0jcg-winlink || "$CONFIGURE_OPERATOR_AUTH" == "
         sudo apt-get install -y apache2-utils
     fi
     echo "Initial operator setup is required."
-    bash "$APP_ROOT/tools/setup_operator_auth.sh"
+    if [[ -n "${N0JCG_OPERATOR_AUTH_ENV:-}" ]]; then
+        env N0JCG_OPERATOR_AUTH_ENV="$N0JCG_OPERATOR_AUTH_ENV" bash "$APP_ROOT/tools/setup_operator_auth.sh"
+    else
+        bash "$APP_ROOT/tools/setup_operator_auth.sh"
+    fi
 else
     echo "PASS: existing operator authentication preserved"
 fi

@@ -3,24 +3,41 @@ set -euo pipefail
 
 AUTH_FILE="/etc/nginx/.htpasswd-n0jcg-winlink"
 AUTH_SNIPPET="/etc/nginx/snippets/n0jcg-winlink-auth.conf.optional"
+FROM_ENV=0
+
+if [[ -n "${N0JCG_OPERATOR_AUTH_ENV:-}" && -f "$N0JCG_OPERATOR_AUTH_ENV" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$N0JCG_OPERATOR_AUTH_ENV"
+    set +a
+    FROM_ENV=1
+fi
 
 command -v htpasswd >/dev/null || {
     echo "FAIL: htpasswd is required; install apache2-utils first" >&2
     exit 1
 }
 
-printf '%s' 'Operator username (required, for example operator): '
-read -r OPERATOR_USER
-if [[ -z "$OPERATOR_USER" ]]; then
+if [[ "$FROM_ENV" != "1" ]]; then
+    printf '%s' 'Operator username (required, for example operator): '
+    read -r OPERATOR_USER
+    if [[ -z "$OPERATOR_USER" ]]; then
+        echo "FAIL: operator username cannot be empty" >&2
+        exit 1
+    fi
+    printf '%s' "Password for operator '$OPERATOR_USER': "
+    read -r -s OPERATOR_PASSWORD
+    echo
+    printf '%s' "Confirm password for operator '$OPERATOR_USER': "
+    read -r -s OPERATOR_PASSWORD_CONFIRM
+    echo
+else
+    OPERATOR_PASSWORD_CONFIRM="${OPERATOR_PASSWORD_CONFIRM:-$OPERATOR_PASSWORD}"
+fi
+if [[ -z "${OPERATOR_USER:-}" ]]; then
     echo "FAIL: operator username cannot be empty" >&2
     exit 1
 fi
-printf '%s' "Password for operator '$OPERATOR_USER': "
-read -r -s OPERATOR_PASSWORD
-echo
-printf '%s' "Confirm password for operator '$OPERATOR_USER': "
-read -r -s OPERATOR_PASSWORD_CONFIRM
-echo
 if [[ -z "$OPERATOR_PASSWORD" ]]; then
     echo "FAIL: operator password cannot be empty" >&2
     exit 1
