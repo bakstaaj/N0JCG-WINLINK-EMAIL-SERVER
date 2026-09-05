@@ -160,6 +160,9 @@ class WebmailHelpersTests(unittest.TestCase):
         script = (ROOT / "deploy" / "configure_gps.sh").read_text(encoding="utf-8")
         self.assertIn("/dev/serial/by-id", script)
         self.assertIn("gpsd.socket", script)
+        self.assertIn("n0jcg-gps", script)
+        self.assertIn("readlink -f", script)
+        self.assertIn("gpsd treats DEVICES literally", script)
 
     def test_authentication_progress_has_safe_granular_stages(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
