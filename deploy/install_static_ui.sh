@@ -38,6 +38,7 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
     test -f "$REPO_ROOT/deploy/configure_packet_radio.sh"
+    test -f "$REPO_ROOT/deploy/setup_digirig.sh"
     test -f "$REPO_ROOT/deploy/configure_gps.sh"
     test -f "$REPO_ROOT/tools/agwpe_identity_bridge.py"
     test -f "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service"
@@ -59,6 +60,30 @@ fi
 if ! command -v systemctl >/dev/null 2>&1; then
     echo "FAIL: systemd is required to run the WES services" >&2
     exit 1
+fi
+
+# Do not continue with a partially writable installation. Linux can remount
+# the root filesystem read-only after storage or filesystem errors; catch that
+# before writing application files and give the operator useful evidence.
+if command -v findmnt >/dev/null 2>&1; then
+    ROOT_MOUNT_OPTIONS="$(findmnt -T / -no OPTIONS 2>/dev/null || true)"
+    if [[ ",${ROOT_MOUNT_OPTIONS}," != *,rw,* ]]; then
+        echo "WARN: root filesystem is mounted read-only; attempting a remount."
+        sudo mount -o remount,rw / >/dev/null 2>&1 || true
+        ROOT_MOUNT_OPTIONS="$(findmnt -T / -no OPTIONS 2>/dev/null || true)"
+    fi
+    if [[ ",${ROOT_MOUNT_OPTIONS}," != *,rw,* ]]; then
+        echo "FAIL: root filesystem remains read-only; installation cannot continue." >&2
+        echo "INFO: inspect storage/filesystem errors with: findmnt -T /; dmesg | tail -80" >&2
+        exit 30
+    fi
+    WRITE_TEST="/etc/.n0jcg-wes-write-test.$$"
+    if ! sudo sh -c "umask 077; touch '$WRITE_TEST'" >/dev/null 2>&1; then
+        echo "FAIL: /etc is not writable even though the root mount reports rw." >&2
+        echo "INFO: inspect the filesystem and storage with: findmnt -T /etc; dmesg | tail -80" >&2
+        exit 30
+    fi
+    sudo rm -f "$WRITE_TEST"
 fi
 
 if [[ ! -f /etc/n0jcg-winlink/network.conf ]]; then
@@ -114,6 +139,7 @@ sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" "$APP_ROOT/tools/n0
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/tools/n0jcg-network-fallback.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/setup_digirig.sh" "$APP_ROOT/tools/setup_digirig.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools/apply_radio_profile.sh"
 sudo install -m 0755 "$REPO_ROOT/tools/wes_direwolf_autogain.py" /usr/local/sbin/n0jcg-wes-direwolf-autogain
 sudo install -m 0755 "$REPO_ROOT/tools/wes_audio_tee.py" /usr/local/sbin/n0jcg-wes-audio-tee
@@ -123,6 +149,7 @@ sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tool
 for helper in /usr/local/sbin/n0jcg-wes-* "$APP_ROOT"/tools/*.py "$APP_ROOT"/tools/*.sh; do
     [[ -f "$helper" ]] && sudo sed -i 's/\r$//' "$helper"
 done
+sudo bash "$APP_ROOT/tools/setup_digirig.sh"
 
 # Install the Pat ARM64 client. The bundled client-side build is based on the
 # official Pat 0.17.0 source and uses the standard Winlink FBB exchange; its

@@ -156,10 +156,11 @@
       document.getElementById('forms-count').textContent = String(details.count || 0);
     }
     async function refreshDiagnostics() {
-      if (!diagnosticStatus) return;
-      diagnosticStatus.textContent = 'Checking…';
+      if (diagnosticStatus) diagnosticStatus.textContent = 'Checking…';
+      const diagnosticsController = new AbortController();
+      const diagnosticsTimeout = window.setTimeout(() => diagnosticsController.abort(), 8000);
       try {
-        const response = await fetch('../api/v1/operator/diagnostics', { cache: 'no-store' });
+        const response = await fetch('../api/v1/operator/diagnostics', { cache: 'no-store', signal: diagnosticsController.signal });
         if (!response.ok) throw new Error('diagnostics unavailable');
         const data = await response.json();
       const devices = data.devices || {};
@@ -192,11 +193,22 @@
       updateFormsCard(forms);
       updateGatewaySummary(rmsGateways);
       const sessionEvidence = radioInterfacePresent ? `Interface present; target ${packet.rms_target || 'not configured'}; Packet RMS transmit/receive is managed per synchronization.` : 'Unavailable until the radio interface is detected.';
-      diagnosticList.innerHTML = `<li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Audio: ${present(devices.audio && devices.audio.present)}; serial: ${present(devices.serial && devices.serial.present)}; PTT: ${present(devices.ptt && devices.ptt.present)}.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf binary: ${direwolfInstalled ? 'installed' : 'not installed'}; service: ${services.direwolf || 'unknown'}.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Pat binary: ${patInstalled ? 'installed' : 'not installed'}; Webmail service: ${services.webmail || 'unknown'}; login transport is on demand.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>${sessionEvidence}</small></span></li>`;
-      diagnosticStatus.textContent = 'Live evidence';
-      diagnosticStatus.className = 'status status-detected';
-      diagnosticObserved.textContent = `Observed ${data.observed_at || 'unknown'} from ${data.source || 'local probe'}.`;
-      } catch (_) { diagnosticStatus.textContent = 'Unavailable'; diagnosticStatus.className = 'status status-unavailable'; }
+      if (diagnosticList) diagnosticList.innerHTML = `<li><span class="check-icon">1</span><span><strong>Device discovery</strong><small>Audio: ${present(devices.audio && devices.audio.present)}; serial: ${present(devices.serial && devices.serial.present)}; PTT: ${present(devices.ptt && devices.ptt.present)}.</small></span></li><li><span class="check-icon">2</span><span><strong>Packet modem</strong><small>Dire Wolf binary: ${direwolfInstalled ? 'installed' : 'not installed'}; service: ${services.direwolf || 'unknown'}.</small></span></li><li><span class="check-icon">3</span><span><strong>Winlink client</strong><small>Pat binary: ${patInstalled ? 'installed' : 'not installed'}; Webmail service: ${services.webmail || 'unknown'}; login transport is on demand.</small></span></li><li><span class="check-icon">4</span><span><strong>Radio and Packet RMS session</strong><small>${sessionEvidence}</small></span></li>`;
+      if (diagnosticStatus) { diagnosticStatus.textContent = 'Live evidence'; diagnosticStatus.className = 'status status-detected'; }
+      if (diagnosticObserved) diagnosticObserved.textContent = `Observed ${data.observed_at || 'unknown'} from ${data.source || 'local probe'}.`;
+      } catch (_) {
+        setStatus('appliance-status', 'Status unavailable', 'status-unavailable');
+        const transmitPolicy = document.getElementById('transmit-policy');
+        if (transmitPolicy) transmitPolicy.textContent = 'Unable to read local policy';
+        setStatus('digirig-status', 'Status unavailable', 'status-unavailable');
+        ['digirig-audio', 'digirig-serial', 'digirig-ptt', 'pat-state', 'webmail-state', 'direwolf-state', 'rms-target'].forEach((id) => {
+          const element = document.getElementById(id);
+          if (element) element.textContent = 'Unavailable';
+        });
+        setStatus('winlink-status', 'Status unavailable', 'status-unavailable');
+        setStatus('packet-status', 'Status unavailable', 'status-unavailable');
+        if (diagnosticStatus) { diagnosticStatus.textContent = 'Unavailable'; diagnosticStatus.className = 'status status-unavailable'; }
+      } finally { window.clearTimeout(diagnosticsTimeout); }
     }
     document.getElementById('diagnostic-refresh')?.addEventListener('click', refreshDiagnostics);
     document.getElementById('forms-update').addEventListener('click', async (event) => {
@@ -317,10 +329,8 @@
     loadRegistration();
     loadRadioProfile();
     loadGateways();
-    if (diagnosticStatus) {
-      refreshDiagnostics();
-      window.setInterval(refreshDiagnostics, 30000);
-    }
+    refreshDiagnostics();
+    window.setInterval(refreshDiagnostics, 30000);
   </script>
 </body>
 </html>

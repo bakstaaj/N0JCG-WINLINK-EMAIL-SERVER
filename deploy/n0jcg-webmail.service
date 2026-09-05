@@ -16,6 +16,7 @@ ProtectHome=read-only
 ReadWritePaths=/var/lib/n0jcg-winlink-webmail
 ReadWritePaths=/var/lib/n0jcg-winlink
 ReadWritePaths=/home/@APP_USER@/.local/state/pat
+ReadWritePaths=/etc/n0jcg-winlink
 Environment=N0JCG_WEBMAIL_STATE_DIR=/var/lib/n0jcg-winlink-webmail
 EnvironmentFile=-/var/lib/n0jcg-winlink-webmail/radio-profile.conf
 Environment=N0JCG_PAT_TRACE=1

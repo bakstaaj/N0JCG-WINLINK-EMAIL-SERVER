@@ -200,6 +200,50 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("waiting for the Pi to reboot", deployer)
         self.assertIn("verified after reboot", deployer)
 
+    def test_connectivity_setup_detects_netplan_renderer_and_wifi_device(self):
+        setup = (ROOT / "deploy" / "setup_connectivity.sh").read_text(encoding="utf-8")
+        fallback = (ROOT / "deploy" / "n0jcg-network-fallback.sh").read_text(encoding="utf-8")
+        self.assertIn("netplan get network.renderer", setup)
+        self.assertIn("99-n0jcg-wes-networkmanager.yaml", setup)
+        self.assertIn("N0JCG_WIFI_DEVICE", setup)
+        self.assertIn('chmod 0600 "$NETPLAN_OVERRIDE"', setup)
+        self.assertNotIn("netplan apply", setup)
+        self.assertIn("ip route show default dev", fallback)
+
+    def test_digirig_installer_creates_stable_serial_ptt_aliases(self):
+        script = (ROOT / "deploy" / "setup_digirig.sh").read_text(encoding="utf-8")
+        self.assertIn("70-n0jcg-digirig.rules", script)
+        self.assertIn('idVendor}=="10c4"', script)
+        self.assertIn('idVendor}=="1a86"', script)
+        self.assertIn('SYMLINK+="digirig-serial"', script)
+        self.assertIn('udevadm trigger --action=add --subsystem-match=tty', script)
+        api = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn("def _digirig_serial_device():", api)
+        self.assertIn("/dev/serial/by-id", api)
+
+    def test_installer_checks_root_filesystem_is_writable(self):
+        installer = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
+        self.assertIn('findmnt -T / -no OPTIONS', installer)
+        self.assertIn('mount -o remount,rw /', installer)
+        self.assertIn('root filesystem remains read-only', installer)
+        self.assertIn('touch', installer)
+        self.assertIn('/etc is not writable even though the root mount reports rw', installer)
+
+    def test_webmail_sandbox_allows_radio_profile_config_only(self):
+        service = (ROOT / "deploy" / "n0jcg-webmail.service").read_text(encoding="utf-8")
+        self.assertIn("ProtectSystem=strict", service)
+        self.assertIn("ReadWritePaths=/etc/n0jcg-winlink", service)
+
+    def test_radio_profile_returns_actionable_apply_errors(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        self.assertIn('"source": "radio_profile"', source)
+        self.assertIn('HTTPStatus.SERVICE_UNAVAILABLE', source)
+        self.assertIn("The Pi system filesystem is read-only", source)
+        script = (ROOT / "deploy" / "apply_radio_profile.sh").read_text(encoding="utf-8")
+        self.assertIn("remount,rw /", script)
+        self.assertIn('mkdir -p "$CONFIG_DIR"', script)
+        self.assertIn('for attempt in 1 2 3', script)
+
     def test_common_pat_failures_have_actionable_explanations(self):
         self.assertIn("Verify the RMS target, frequency, 1200-AFSK mode", MODULE.meaningful_pat_error("Unable to establish connection to remote: port closed"))
         self.assertIn("secure login stage completed", MODULE.meaningful_pat_error("Exchange failed: connection lost", "mailbox_index"))

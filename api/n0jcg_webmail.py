@@ -320,12 +320,33 @@ def _journal_events(unit, source, limit=80):
     return events
 
 
+def _digirig_serial_device():
+    """Return the stable DigiRig serial alias or a non-GPS USB serial path."""
+    aliases = (Path("/dev/digirig-serial"), Path("/dev/digirig-ptt"))
+    for path in aliases:
+        if path.exists():
+            return str(path)
+    for path in sorted(Path("/dev/serial/by-id").glob("*") if Path("/dev/serial/by-id").exists() else []):
+        name = path.name.lower()
+        if any(token in name for token in ("gps", "gnss", "u-blox")):
+            continue
+        if path.exists():
+            return str(path)
+    for path in sorted(Path("/dev").glob("ttyUSB*")):
+        if path.exists():
+            return str(path)
+    return None
+
+
 def sync_debug(callsign):
     with LOCK:
         job = SYNC_JOBS.get(callsign)
         pat_events = list(job.get("events", [])) if job else []
         snapshot = sync_status(callsign)
-    devices = {"audio": Path("/dev/snd").exists(), "serial": Path("/dev/digirig-serial").exists(), "ptt": Path("/dev/digirig-ptt").exists()}
+    serial_device = _digirig_serial_device()
+    devices = {"audio": Path("/dev/snd").exists(), "serial": bool(serial_device), "ptt": bool(serial_device)}
+    devices["serial_path"] = serial_device
+    devices["ptt_path"] = serial_device
     events = pat_events + _journal_events("n0jcg-direwolf.service", "Dire Wolf") + _journal_events("n0jcg-agwpe-identity-bridge.service", "AGW bridge")
     events.append({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "source": "DigiRig", "message": f"audio={'present' if devices['audio'] else 'missing'}, serial={'present' if devices['serial'] else 'missing'}, PTT={'present' if devices['ptt'] else 'missing'}"})
     events.sort(key=lambda item: item.get("at", ""))
@@ -1115,10 +1136,12 @@ def audio_calibration_status():
 
 
 def operator_diagnostics():
-    devices = {}
-    for label, pattern in (("audio", "/dev/snd"), ("serial", "/dev/digirig-serial"), ("ptt", "/dev/digirig-ptt")):
-        path = Path(pattern)
-        devices[label] = {"path": pattern, "present": path.exists()}
+    serial_device = _digirig_serial_device()
+    devices = {
+        "audio": {"path": "/dev/snd", "present": Path("/dev/snd").exists()},
+        "serial": {"path": serial_device or "/dev/digirig-serial", "present": bool(serial_device)},
+        "ptt": {"path": serial_device or "/dev/digirig-ptt", "present": bool(serial_device)},
+    }
     templates = template_catalog()
     profile = radio_profile()
     return {
@@ -1179,7 +1202,10 @@ def apply_radio_profile(data):
     RADIO_PROFILE_PATH.write_text("\n".join(profile_lines), encoding="utf-8")
     result = subprocess.run(["sudo", "/opt/n0jcg-winlink/tools/apply_radio_profile.sh"], capture_output=True, text=True, timeout=20)
     if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout or "radio profile could not be applied").strip()[-500:])
+        detail = (result.stderr or result.stdout or "radio profile could not be applied").strip()[-500:]
+        if "read-only" in detail.lower() or "os error 30" in detail.lower() or "errno 30" in detail.lower():
+            raise RuntimeError("The Pi system filesystem is read-only. Remount / read-write, then save the radio profile again.")
+        raise RuntimeError(detail)
     return radio_profile()
 
 
@@ -1412,7 +1438,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.OK, {"source": "winlink_standard_forms", "updated": True, "count": len(forms.get("templates", [])), **payload})
                 return
             if self.path == "/api/v1/operator/radio-profile":
-                payload = apply_radio_profile(data)
+                try:
+                    payload = apply_radio_profile(data)
+                except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
+                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "source": "radio_profile"})
+                    return
                 self.send_json(HTTPStatus.OK, {"saved": True, "profile": payload})
                 return
             if self.path == "/api/v1/operator/audio-calibration":

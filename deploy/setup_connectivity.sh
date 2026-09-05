@@ -9,6 +9,7 @@ USB_CONNECTION="n0jcg-usb-gadget"
 AP_ADDRESS="192.168.50.1/24"
 AP_DHCP_RANGE="192.168.50.100,192.168.50.200"
 USB_ADDRESS="192.168.60.1/24"
+NETPLAN_OVERRIDE="/etc/netplan/99-n0jcg-wes-networkmanager.yaml"
 
 [[ "${EUID:-$(id -u)}" == "0" ]] || { echo "FAIL: run as root (sudo $0)" >&2; exit 1; }
 FROM_ENV=0
@@ -31,10 +32,62 @@ prompt_value() {
     printf '%s' "${value:-$current}"
 }
 
+detect_network_backend() {
+    local renderer=""
+    if command -v netplan >/dev/null 2>&1 && compgen -G '/etc/netplan/*.yaml' >/dev/null; then
+        renderer="$(netplan get network.renderer 2>/dev/null | tr -d '\"[:space:]' || true)"
+        case "$renderer" in
+            networkd) printf '%s' "netplan-networkd"; return 0 ;;
+            NetworkManager|networkmanager) printf '%s' "netplan-networkmanager"; return 0 ;;
+        esac
+    fi
+    if systemctl is-active --quiet NetworkManager.service 2>/dev/null; then
+        printf '%s' "networkmanager"
+    elif systemctl is-active --quiet systemd-networkd.service 2>/dev/null; then
+        printf '%s' "systemd-networkd"
+    else
+        printf '%s' "unknown"
+    fi
+}
+
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y network-manager
 systemctl enable --now NetworkManager.service
 install -d -m 0755 "$CONFIG_DIR"
+
+NETWORK_BACKEND="$(detect_network_backend)"
+echo "INFO: detected network backend: $NETWORK_BACKEND"
+if [[ "$NETWORK_BACKEND" == "netplan-networkd" || "$NETWORK_BACKEND" == "systemd-networkd" ]]; then
+    if ! command -v netplan >/dev/null 2>&1; then
+        echo "FAIL: systemd-networkd is active but netplan is unavailable; cannot configure WES safely" >&2
+        exit 1
+    fi
+    cat > "$NETPLAN_OVERRIDE" <<'EOF'
+# N0JCG WES requires NetworkManager for managed Wi-Fi and hotspot fallback.
+network:
+  version: 2
+  renderer: NetworkManager
+EOF
+    chmod 0600 "$NETPLAN_OVERRIDE"
+    netplan generate
+    systemctl enable --now NetworkManager.service
+    NETWORK_BACKEND="netplan-networkmanager"
+    echo "INFO: netplan was using systemd-networkd; selected NetworkManager for WES after reboot."
+fi
+
+detect_wifi_device() {
+    if [[ -n "${N0JCG_WIFI_DEVICE:-}" && -e "/sys/class/net/$N0JCG_WIFI_DEVICE" ]]; then
+        printf '%s' "$N0JCG_WIFI_DEVICE"
+        return 0
+    fi
+    nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2 == "wifi" { print $1; exit }'
+}
+
+WIFI_DEVICE="$(detect_wifi_device)"
+if [[ -z "$WIFI_DEVICE" ]]; then
+    echo "FAIL: no wireless network interface was detected" >&2
+    exit 1
+fi
 
 AP_SSID="${N0JCG_AP_SSID:-N0JCG-WES}"
 AP_PASSWORD="${N0JCG_AP_PASSWORD:-Password}"
@@ -58,6 +111,8 @@ fi
 
 cat > "$CONFIG_FILE" <<EOF
 N0JCG_AP_SSID=$(printf '%q' "$AP_SSID")
+N0JCG_WIFI_DEVICE=$(printf '%q' "$WIFI_DEVICE")
+N0JCG_NETWORK_BACKEND=$(printf '%q' "$NETWORK_BACKEND")
 N0JCG_AP_ADDRESS=$AP_ADDRESS
 N0JCG_AP_DHCP_RANGE=$AP_DHCP_RANGE
 N0JCG_USB_ADDRESS=$USB_ADDRESS
@@ -68,7 +123,7 @@ nmcli connection delete "$WIFI_CONNECTION" >/dev/null 2>&1 || true
 nmcli connection delete "$HOTSPOT_CONNECTION" >/dev/null 2>&1 || true
 nmcli connection delete "$USB_CONNECTION" >/dev/null 2>&1 || true
 
-nmcli connection add type wifi ifname wlan0 con-name "$HOTSPOT_CONNECTION" ssid "$AP_SSID"
+nmcli connection add type wifi ifname "$WIFI_DEVICE" con-name "$HOTSPOT_CONNECTION" ssid "$AP_SSID"
 nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.mode ap 802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASSWORD" ipv4.method shared ipv4.addresses "$AP_ADDRESS" ipv4.shared-dhcp-range "$AP_DHCP_RANGE" ipv6.method disabled connection.autoconnect no
 
 nmcli connection add type ethernet ifname usb0 con-name "$USB_CONNECTION"
