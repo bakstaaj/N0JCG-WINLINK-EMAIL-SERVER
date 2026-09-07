@@ -116,6 +116,8 @@ N0JCG_NETWORK_BACKEND=$(printf '%q' "$NETWORK_BACKEND")
 N0JCG_AP_ADDRESS=$AP_ADDRESS
 N0JCG_AP_DHCP_RANGE=$AP_DHCP_RANGE
 N0JCG_USB_ADDRESS=$USB_ADDRESS
+N0JCG_WIFI_DISABLED=1
+N0JCG_AUTO_HOTSPOT=1
 EOF
 chmod 0600 "$CONFIG_FILE"
 
@@ -124,7 +126,7 @@ nmcli connection delete "$HOTSPOT_CONNECTION" >/dev/null 2>&1 || true
 nmcli connection delete "$USB_CONNECTION" >/dev/null 2>&1 || true
 
 nmcli connection add type wifi ifname "$WIFI_DEVICE" con-name "$HOTSPOT_CONNECTION" ssid "$AP_SSID"
-nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.mode ap 802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASSWORD" ipv4.method shared ipv4.addresses "$AP_ADDRESS" ipv4.shared-dhcp-range "$AP_DHCP_RANGE" ipv6.method disabled connection.autoconnect no
+nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.mode ap 802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASSWORD" ipv4.method shared ipv4.addresses "$AP_ADDRESS" ipv4.shared-dhcp-range "$AP_DHCP_RANGE" ipv6.method disabled connection.autoconnect yes
 
 nmcli connection add type ethernet ifname usb0 con-name "$USB_CONNECTION"
 nmcli connection modify "$USB_CONNECTION" ipv4.method disabled ipv6.method disabled connection.autoconnect no
@@ -153,7 +155,8 @@ systemctl enable n0jcg-usb-gadget.service n0jcg-usb-network.service n0jcg-networ
 systemctl restart n0jcg-usb-gadget.service || true
 systemctl restart n0jcg-usb-network.service || true
 systemctl restart n0jcg-network-fallback.service
-echo "PASS: Wi-Fi and fallback hotspot configured"
+echo "PASS: hotspot configured as the startup network; local Wi-Fi is disabled until enabled by the operator"
 echo "INFO: hotspot is $AP_SSID at $AP_ADDRESS with leases $AP_DHCP_RANGE"
-echo "INFO: USB gadget uses 192.168.60.1 on the Pi 4 USB-C power/data port"
+echo "INFO: USB gadget uses static 192.168.60.1 on the Pi 4 USB-C power/data port"
+echo "INFO: USB DHCP is disabled; configure the Windows USB Ethernet adapter as 192.168.60.2/24"
 echo "INFO: reboot required if dwc2 was newly added to the boot configuration"

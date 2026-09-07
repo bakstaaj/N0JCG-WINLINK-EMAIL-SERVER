@@ -25,7 +25,10 @@ if [[ -z "$WIFI_DEVICE" ]]; then
 fi
 
 wifi_is_ready() {
-    [[ "${N0JCG_WIFI_DISABLED:-0}" != "1" ]] || return 1
+    # Connectivity setup deliberately defaults to hotspot-first. An older
+    # config without this key is treated the same way until the operator
+    # explicitly enables local Wi-Fi in the console.
+    [[ "${N0JCG_WIFI_DISABLED:-1}" != "1" ]] || return 1
     [[ -n "$WIFI_DEVICE" ]] && \
         ip link show dev "$WIFI_DEVICE" >/dev/null 2>&1 && \
         ip -4 addr show dev "$WIFI_DEVICE" 2>/dev/null | grep -q 'inet ' && \
@@ -44,6 +47,12 @@ ensure_network_state() {
         # the original default SSID.
         if [[ -n "${N0JCG_AP_SSID:-}" ]]; then
             nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.ssid "$N0JCG_AP_SSID" >/dev/null 2>&1 || true
+        fi
+        # Do not re-activate an already-running AP. Repeated activation
+        # tears down the beacon and DHCP process and prevents clients from
+        # completing association/authentication.
+        if nmcli -t -f NAME,DEVICE connection show --active | grep -Fqx "$HOTSPOT_CONNECTION:$WIFI_DEVICE"; then
+            return 0
         fi
         nmcli connection up "$HOTSPOT_CONNECTION" ifname "$WIFI_DEVICE" >/dev/null 2>&1 || true
     fi

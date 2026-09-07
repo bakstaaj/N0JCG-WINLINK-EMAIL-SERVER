@@ -1,6 +1,6 @@
 # N0JCG Winlink Email Server
 
-Current release: v0.1.25
+Current release: v0.1.26
 
 N0JCG Winlink Email Server is a Raspberry Pi client-side appliance for sending and receiving Winlink email through a Packet RMS gateway. It uses a DigiRig Mobile, a connected radio, Dire Wolf, and Pat.
 
@@ -101,9 +101,15 @@ installation:
 The helper configures the `N0JCG-WES` hotspot and confirms its password. The Pi
 activates the hotspot at `192.168.50.1` and leases
 addresses from `192.168.50.100` through `192.168.50.200`.
+After connectivity setup, the Pi boots hotspot-first with local client Wi-Fi
+disabled. Enabling local Wi-Fi in the operator console stops the hotspot and
+connects to the saved LAN network; disabling local Wi-Fi starts the hotspot
+again.
 The USB gadget is available as a direct Ethernet connection at
 `192.168.60.1` through the Pi 4 USB-C power/data port; the blue USB host ports
-are not gadget ports.
+are not gadget ports. USB DHCP is intentionally disabled: configure the
+Windows USB Ethernet adapter manually as `192.168.60.2` with subnet mask
+`255.255.255.0` and leave gateway and DNS blank.
 
 The helper uses the MSYS2 `sshpass` package and prompts once for the Pi SSH
 password. For a scripted run, set `N0JCG_PI_PASSWORD` in the current shell;

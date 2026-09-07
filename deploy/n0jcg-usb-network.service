@@ -1,14 +1,13 @@
 [Unit]
-Description=N0JCG Winlink USB network activation
+Description=N0JCG Winlink static USB network
 Requires=n0jcg-usb-gadget.service
 After=n0jcg-usb-gadget.service NetworkManager.service
 Wants=NetworkManager.service
 
 [Service]
-Type=simple
+Type=oneshot
 ExecStart=/usr/local/sbin/n0jcg-usb-network.sh
-Restart=on-failure
-RestartSec=5
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

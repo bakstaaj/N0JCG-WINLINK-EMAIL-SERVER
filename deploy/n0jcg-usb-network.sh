@@ -4,7 +4,6 @@ set -euo pipefail
 USB_CONNECTION="n0jcg-usb-gadget"
 USB_DEVICE="usb0"
 USB_ADDRESS="192.168.60.1/24"
-DHCP_RANGE="192.168.60.100,192.168.60.200,255.255.255.0,12h"
 
 for _ in {1..30}; do
     ip link show dev "$USB_DEVICE" >/dev/null 2>&1 && break
@@ -17,7 +16,8 @@ ip link show dev "$USB_DEVICE" >/dev/null 2>&1 || {
 
 # NetworkManager's shared profile can report carrier while the RNDIS netdev is
 # not actually lower-up. Keep NetworkManager away from this interface and own
-# the static peer address and DHCP process here instead.
+# only the Pi-side static address here. The Windows host must use a static
+# address (192.168.60.2/24); this interface intentionally provides no DHCP.
 nmcli connection down "$USB_CONNECTION" >/dev/null 2>&1 || true
 nmcli connection modify "$USB_CONNECTION" ipv4.addresses "" ipv4.method disabled connection.autoconnect no >/dev/null 2>&1 || true
 nmcli device set "$USB_DEVICE" managed no >/dev/null 2>&1 || true
@@ -25,13 +25,4 @@ nmcli device set "$USB_DEVICE" managed no >/dev/null 2>&1 || true
 ip link set "$USB_DEVICE" up
 ip addr replace "$USB_ADDRESS" dev "$USB_DEVICE"
 
-exec dnsmasq \
-    --no-daemon \
-    --keep-in-foreground \
-    --interface="$USB_DEVICE" \
-    --bind-interfaces \
-    --port=0 \
-    --dhcp-authoritative \
-    --dhcp-range="$DHCP_RANGE" \
-    --dhcp-option="3,192.168.60.1" \
-    --dhcp-option="6,192.168.60.1"
+echo "N0JCG USB network: static Pi address is $USB_ADDRESS; configure the Windows host as 192.168.60.2/24. No USB DHCP service is enabled."

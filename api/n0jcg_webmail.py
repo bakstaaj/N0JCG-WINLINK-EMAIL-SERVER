@@ -1285,7 +1285,7 @@ def operator_connectivity():
     return {
         "wifi_ssid": config.get("N0JCG_WIFI_SSID", ""),
         "wifi_device": config.get("N0JCG_WIFI_DEVICE", ""),
-        "wifi_disabled": config.get("N0JCG_WIFI_DISABLED", "0") == "1",
+        "wifi_disabled": config.get("N0JCG_WIFI_DISABLED", "1") == "1",
         "hotspot_ssid": config.get("N0JCG_AP_SSID", "N0JCG-WES"),
         "auto_hotspot": config.get("N0JCG_AUTO_HOTSPOT", "1") == "1",
         "hotspot_active": active("n0jcg-network-fallback.service"),
