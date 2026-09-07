@@ -71,6 +71,7 @@ PAT_PROGRESS_GRACE = int(os.environ.get("N0JCG_PAT_PROGRESS_GRACE_SECONDS", str(
 # This is deliberately independent of the radio profile and RMS settings.
 PAT_RF_COOLDOWN_SECONDS = int(os.environ.get("N0JCG_PAT_RF_COOLDOWN_SECONDS", "10"))
 GPS_RF_GUARD = "/usr/local/sbin/n0jcg-gps-rf-guard"
+OPERATOR_SETTINGS_SCRIPT = os.environ.get("N0JCG_OPERATOR_SETTINGS_SCRIPT", "/opt/n0jcg-winlink/tools/apply_operator_settings.py")
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
@@ -1231,6 +1232,66 @@ def apply_radio_profile(data):
     return radio_profile()
 
 
+def operator_connectivity():
+    config = {}
+    path = Path("/etc/n0jcg-winlink/network.conf")
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                config[key] = value.strip().strip("'\"")
+    except OSError:
+        pass
+    def active(service):
+        return subprocess.run(["systemctl", "is-active", "--quiet", service], capture_output=True).returncode == 0
+    def enabled(service):
+        return subprocess.run(["systemctl", "is-enabled", "--quiet", service], capture_output=True).returncode == 0
+    return {
+        "wifi_ssid": config.get("N0JCG_WIFI_SSID", ""),
+        "wifi_device": config.get("N0JCG_WIFI_DEVICE", ""),
+        "hotspot_ssid": config.get("N0JCG_AP_SSID", "N0JCG-WES"),
+        "auto_hotspot": config.get("N0JCG_AUTO_HOTSPOT", "1") == "1",
+        "hotspot_active": active("n0jcg-network-fallback.service"),
+        "usb_gadget_enabled": enabled("n0jcg-usb-gadget.service"),
+        "usb_gadget_active": active("n0jcg-usb-gadget.service"),
+        "operator_auth_configured": Path("/etc/nginx/.htpasswd-n0jcg-winlink").exists(),
+    }
+
+
+def apply_operator_settings(data):
+    settings = {
+        "wifi_ssid": str(data.get("wifi_ssid") or "").strip(),
+        "wifi_password": str(data.get("wifi_password") or ""),
+        "hotspot_ssid": str(data.get("hotspot_ssid") or "N0JCG-WES").strip(),
+        "hotspot_password": str(data.get("hotspot_password") or ""),
+        "auto_hotspot": bool(data.get("auto_hotspot", True)),
+        "usb_gadget": bool(data.get("usb_gadget", True)),
+        "operator_user": str(data.get("operator_user") or "").strip(),
+        "operator_password": str(data.get("operator_password") or ""),
+    }
+    if settings["wifi_ssid"] and len(settings["wifi_password"]) < 8:
+        raise ValueError("Wi-Fi password must be at least 8 characters")
+    if settings["hotspot_password"] and len(settings["hotspot_password"]) < 8:
+        raise ValueError("hotspot password must be at least 8 characters")
+    if settings["operator_user"] and len(settings["operator_password"]) < 8:
+        raise ValueError("operator password must be at least 8 characters")
+    STATE_DIR.mkdir(mode=0o750, parents=True, exist_ok=True)
+    request = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=STATE_DIR, prefix="operator-settings-", suffix=".json", delete=False)
+    try:
+        json.dump(settings, request)
+        request.close()
+        result = subprocess.run(["sudo", "-n", "python3", OPERATOR_SETTINGS_SCRIPT, request.name], capture_output=True, text=True, timeout=45)
+    finally:
+        try:
+            Path(request.name).unlink()
+        except OSError:
+            pass
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "operator settings could not be applied").strip()[-500:]
+        raise RuntimeError(detail)
+    return operator_connectivity()
+
+
 def remember_account(email, callsign):
     now = int(time.time())
     with sqlite3.connect(DB_PATH) as db:
@@ -1467,6 +1528,14 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.send_json(HTTPStatus.OK, {"saved": True, "profile": payload})
                 return
+            if self.path == "/api/v1/operator/settings":
+                try:
+                    payload = apply_operator_settings(data)
+                except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
+                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "source": "operator_settings"})
+                    return
+                self.send_json(HTTPStatus.OK, {"saved": True, "settings": payload, "warning": "Network changes may disconnect this browser."})
+                return
             if self.path == "/api/v1/operator/audio-calibration":
                 enabled = bool(data.get("enabled"))
                 try:
@@ -1685,6 +1754,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/v1/operator/radio-profile":
             self.send_json(HTTPStatus.OK, {"profile": radio_profile()})
+            return
+        if self.path == "/api/v1/operator/settings":
+            self.send_json(HTTPStatus.OK, {"settings": operator_connectivity()})
             return
         if self.path == "/api/v1/operator/registration":
             registration = registration_status()

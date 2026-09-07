@@ -37,6 +37,7 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/deploy/setup_connectivity.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
+    test -f "$REPO_ROOT/deploy/apply_operator_settings.py"
     test -f "$REPO_ROOT/deploy/configure_packet_radio.sh"
     test -f "$REPO_ROOT/deploy/setup_digirig.sh"
     test -f "$REPO_ROOT/deploy/configure_gps.sh"
@@ -137,6 +138,7 @@ sudo install -m 0755 "$REPO_ROOT/deploy/setup_operator_auth.sh" "$APP_ROOT/tools
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_connectivity.sh" "$APP_ROOT/tools/setup_connectivity.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" "$APP_ROOT/tools/n0jcg-usb-gadget.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/tools/n0jcg-network-fallback.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/apply_operator_settings.py" "$APP_ROOT/tools/apply_operator_settings.py"
 sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_digirig.sh" "$APP_ROOT/tools/setup_digirig.sh"
@@ -190,6 +192,7 @@ sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" "$A
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" | sudo tee /etc/systemd/system/n0jcg-agwpe-identity-bridge.service >/dev/null
 sed -e "s/@APP_USER@/$APP_USER/g" -e "s#@DIREWOLF_BIN@#$DIREWOLF_BIN#g" "$REPO_ROOT/deploy/n0jcg-direwolf.service" | sudo tee /etc/systemd/system/n0jcg-direwolf.service >/dev/null
 printf '%s ALL=(root) NOPASSWD: %s/tools/apply_radio_profile.sh\n' "$APP_USER" "$APP_ROOT" | sudo tee /etc/sudoers.d/n0jcg-radio-profile >/dev/null
+printf '%s ALL=(root) NOPASSWD: %s/tools/apply_operator_settings.py\n' "$APP_USER" "$APP_ROOT" | sudo tee -a /etc/sudoers.d/n0jcg-radio-profile >/dev/null
 printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/n0jcg-gps-rf-guard\n' "$APP_USER" | sudo tee -a /etc/sudoers.d/n0jcg-radio-profile >/dev/null
 sudo chmod 0440 /etc/sudoers.d/n0jcg-radio-profile
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"

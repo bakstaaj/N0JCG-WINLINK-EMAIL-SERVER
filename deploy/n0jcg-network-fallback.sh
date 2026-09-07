@@ -11,6 +11,11 @@ if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
 
+if [[ "${N0JCG_AUTO_HOTSPOT:-1}" != "1" ]]; then
+    nmcli connection down "$HOTSPOT_CONNECTION" >/dev/null 2>&1 || true
+    exit 0
+fi
+
 if [[ -z "$WIFI_DEVICE" ]]; then
     WIFI_DEVICE="$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2 == "wifi" { print $1; exit }')"
 fi

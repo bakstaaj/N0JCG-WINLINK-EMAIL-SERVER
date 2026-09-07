@@ -28,6 +28,20 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('name="email"', ui)
         self.assertIn("Registered email", ui)
 
+    def test_operator_settings_cover_connectivity_and_credentials(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        ui = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+        installer = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
+        helper = (ROOT / "deploy" / "apply_operator_settings.py").read_text(encoding="utf-8")
+        self.assertIn("/api/v1/operator/settings", source)
+        self.assertIn('id="operator-settings-form"', ui)
+        self.assertIn('name="wifi_ssid"', ui)
+        self.assertIn('name="auto_hotspot"', ui)
+        self.assertIn('name="usb_gadget"', ui)
+        self.assertIn('name="operator_password"', ui)
+        self.assertIn("apply_operator_settings.py", installer)
+        self.assertIn("input=settings[\"operator_password\"]", helper)
+
     def test_address_book_is_callsign_scoped_and_available_in_compose(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
         ui = (ROOT / "ui" / "webmail" / "index.html").read_text(encoding="utf-8")

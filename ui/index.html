@@ -25,6 +25,7 @@
       <article class="card"><div class="card-heading"><h2>Appliance</h2><span id="appliance-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Product</dt><dd>N0JCG Winlink Email Server</dd></div><div><dt>Transmit control</dt><dd id="transmit-policy">Checking local policy…</dd></div></dl><p class="muted">Pat and Dire Wolf control RF transmission during authenticated Packet RMS synchronization. Successful Winlink send/receive confirms the RF path.</p></article>
       <article class="card"><div class="card-heading"><h2>DigiRig Mobile</h2><span id="digirig-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Audio subsystem</dt><dd id="digirig-audio" class="mono">Checking…</dd></div><div><dt>Serial</dt><dd id="digirig-serial" class="mono">Checking…</dd></div><div><dt>PTT interface</dt><dd id="digirig-ptt" class="mono">Checking…</dd></div></dl><p class="muted">Presence is operating-system evidence, not proof of audio, PTT, or RF operation.</p></article>
       <article class="card" id="registration-card"><div class="card-heading"><h2>Software registration</h2><span id="registration-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Product ID</dt><dd class="mono">winlink-email-appliance</dd></div><div><dt>Device identity</dt><dd id="registration-device-id" class="mono">Checking…</dd></div><div><dt>Activation</dt><dd id="registration-activation">Checking…</dd></div></dl><form id="registration-form" class="inline-form registration-form"><label>License S/N<input id="registration-key" name="license_serial" autocomplete="off" placeholder="N0JCG-WLA-XXXX-XXXX-XXXX-XXXX" required></label><label>Registered email<input id="registration-email" name="email" type="email" autocomplete="email" placeholder="operator@example.com" required></label><button class="button" type="submit">Activate WES</button></form><p id="registration-message" class="muted" role="status">Trial mode: one inbound message per login.</p></article>
+      <article class="card" id="operator-settings-card"><div class="card-heading"><h2>Operator settings</h2><span id="operator-settings-status" class="status status-unknown">Checking…</span></div><p class="muted">Change network access and the operator console credentials. Applying Wi-Fi settings can disconnect this browser; reconnect using the new network or hotspot settings if needed.</p><form id="operator-settings-form" class="settings-form"><fieldset><legend>Wi-Fi</legend><label>Network name (SSID)<input id="settings-wifi-ssid" name="wifi_ssid" autocomplete="off" placeholder="Optional saved network"></label><label>Wi-Fi password<input id="settings-wifi-password" name="wifi_password" type="password" autocomplete="new-password" placeholder="Enter to change"></label></fieldset><fieldset><legend>Automatic hotspot</legend><label>Hotspot name (SSID)<input id="settings-hotspot-ssid" name="hotspot_ssid" autocomplete="off"></label><label>Hotspot password<input id="settings-hotspot-password" name="hotspot_password" type="password" autocomplete="new-password" placeholder="Enter to change"></label><label class="settings-check"><input id="settings-auto-hotspot" name="auto_hotspot" type="checkbox"> Enable automatic hotspot fallback</label></fieldset><fieldset><legend>USB gadget network</legend><label class="settings-check"><input id="settings-usb-gadget" name="usb_gadget" type="checkbox"> Enable USB gadget networking</label><small class="muted">Uses the appliance USB network interface at 192.168.60.1 when supported by the hardware.</small></fieldset><fieldset><legend>Operator console login</legend><label>Username<input id="settings-operator-user" name="operator_user" autocomplete="username" placeholder="Leave blank to keep current"></label><label>New password<input id="settings-operator-password" name="operator_password" type="password" autocomplete="new-password" placeholder="Leave blank to keep current"></label></fieldset><div class="settings-actions"><button class="button" type="submit">Save operator settings</button><p id="operator-settings-message" class="muted" role="status"></p></div></form></article>
       <article class="card"><div class="card-heading"><h2>Winlink client</h2><span id="winlink-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Pat client</dt><dd id="pat-state">Checking…</dd></div><div><dt>Webmail service</dt><dd id="webmail-state">Checking…</dd></div><div><dt>Packet modem</dt><dd id="direwolf-state">Checking…</dd></div><div><dt>Packet RMS target</dt><dd id="rms-target" class="mono">Checking…</dd></div></dl><p class="muted">Pat synchronization is started on demand after a user’s Winlink secure login.</p></article>
       <article class="card"><div class="card-heading"><h2>Standard Forms</h2><span id="forms-status" class="status status-unknown">Checking…</span></div><dl class="facts"><div><dt>Library</dt><dd id="forms-version">Not installed</dd></div><div><dt>Available forms</dt><dd id="forms-count">0</dd></div></dl><button class="button" id="forms-update" type="button">Update Standard Forms</button><p id="forms-message" class="muted" role="status">The operator password is required to update the official library.</p></article>
       <article class="card" id="packet-station-card" tabindex="-1"><div class="card-heading"><h2>Packet station</h2><span id="packet-status" class="status status-unknown">Checking…</span></div><form id="radio-profile-form" class="facts"><label>Local packet station ID<input id="packet-callsign" name="packet_callsign" pattern="[A-Za-z0-9-]{3,15}" required></label><label>RMS gateway target<input id="rms-target-input" name="rms_target" pattern="[A-Za-z0-9-]{3,15}" required></label><label>Radio frequency (MHz)<input id="packet-frequency" name="frequency" inputmode="decimal" pattern="[0-9]{2,3}(\.[0-9]{1,6})?" required></label><label>Digipeater path (optional)<input id="digipeater-path" name="digipeater_path" pattern="[A-Za-z0-9-]{3,15}(,[A-Za-z0-9-]{3,15})*" placeholder="blank for direct RMS"></label><label>Automatic mailbox sync (minutes)<input id="auto-sync-minutes" name="auto_sync_minutes" type="number" min="5" max="1440" step="1" required></label><button class="button" type="submit">Save radio profile</button><p id="radio-profile-message" class="muted" role="status"></p></form><p class="muted">The local ID identifies this appliance; the target and frequency identify the selected Packet RMS gateway. A digipeater path is only used when a compatible Winlink Packet digipeater is selected.</p></article>
@@ -228,6 +229,48 @@
     });
     const radioForm = document.getElementById('radio-profile-form');
     const registrationForm = document.getElementById('registration-form');
+    const operatorSettingsForm = document.getElementById('operator-settings-form');
+    function setOperatorSettingsStatus(text, className = 'status-unknown') {
+      const element = document.getElementById('operator-settings-status');
+      element.textContent = text;
+      element.className = `status ${className}`;
+    }
+    async function loadOperatorSettings() {
+      try {
+        const response = await fetch('../api/v1/operator/settings', { cache: 'no-store' });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Operator settings unavailable.');
+        const settings = body.settings || {};
+        document.getElementById('settings-wifi-ssid').value = settings.wifi_ssid || '';
+        document.getElementById('settings-hotspot-ssid').value = settings.hotspot_ssid || 'N0JCG-WES';
+        document.getElementById('settings-auto-hotspot').checked = Boolean(settings.auto_hotspot);
+        document.getElementById('settings-usb-gadget').checked = Boolean(settings.usb_gadget_enabled);
+        setOperatorSettingsStatus(settings.operator_auth_configured ? 'Configured' : 'Action required', settings.operator_auth_configured ? 'status-ready' : 'status-unavailable');
+      } catch (error) {
+        setOperatorSettingsStatus('Unavailable', 'status-unavailable');
+        document.getElementById('operator-settings-message').textContent = error.message;
+      }
+    }
+    operatorSettingsForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = document.getElementById('operator-settings-message');
+      const values = Object.fromEntries(new FormData(operatorSettingsForm));
+      values.auto_hotspot = document.getElementById('settings-auto-hotspot').checked;
+      values.usb_gadget = document.getElementById('settings-usb-gadget').checked;
+      const button = operatorSettingsForm.querySelector('button[type="submit"]');
+      button.disabled = true; message.textContent = 'Applying operator settings…'; setOperatorSettingsStatus('Applying…');
+      try {
+        const response = await fetch('../api/v1/operator/settings', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(values) });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || 'Operator settings could not be applied.');
+        operatorSettingsForm.querySelector('#settings-wifi-password').value = '';
+        operatorSettingsForm.querySelector('#settings-hotspot-password').value = '';
+        operatorSettingsForm.querySelector('#settings-operator-password').value = '';
+        message.textContent = body.warning || 'Operator settings applied.'; setOperatorSettingsStatus('Configured', 'status-ready');
+        await loadOperatorSettings();
+      } catch (error) { message.textContent = error.message; setOperatorSettingsStatus('Not applied', 'status-unavailable'); }
+      finally { button.disabled = false; }
+    });
     async function loadRegistration() {
       try {
         const response = await fetch('../api/v1/operator/registration', { cache: 'no-store' });
@@ -327,6 +370,7 @@
       } catch (error) { message.textContent = error.message; } finally { button.disabled = false; }
     });
     loadRegistration();
+    loadOperatorSettings();
     loadRadioProfile();
     loadGateways();
     refreshDiagnostics();
