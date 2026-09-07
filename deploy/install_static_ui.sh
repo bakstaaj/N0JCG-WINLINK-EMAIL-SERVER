@@ -36,6 +36,9 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/api/winlink_templates.py"
     test -f "$REPO_ROOT/deploy/setup_connectivity.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh"
+    test -f "$REPO_ROOT/deploy/n0jcg-usb-gadget-remove.sh"
+    test -f "$REPO_ROOT/deploy/n0jcg-usb-network.sh"
+    test -f "$REPO_ROOT/deploy/n0jcg-usb-network.service"
     test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
     test -f "$REPO_ROOT/deploy/apply_operator_settings.py"
     test -f "$REPO_ROOT/deploy/configure_packet_radio.sh"
@@ -56,7 +59,16 @@ if ! command -v nginx >/dev/null 2>&1; then
     fi
     echo "Nginx is not installed; installing it for the Webmail service."
     sudo apt-get update
-    sudo apt-get install -y nginx
+    sudo apt-get install -y nginx dnsmasq iptables
+fi
+if command -v apt-get >/dev/null 2>&1; then
+    missing_packages=()
+    [[ -x /usr/sbin/dnsmasq || -x /sbin/dnsmasq ]] || missing_packages+=(dnsmasq)
+    [[ -x /usr/sbin/iptables || -x /sbin/iptables ]] || missing_packages+=(iptables)
+    if ((${#missing_packages[@]})); then
+        sudo apt-get update
+        sudo apt-get install -y "${missing_packages[@]}"
+    fi
 fi
 if ! command -v systemctl >/dev/null 2>&1; then
     echo "FAIL: systemd is required to run the WES services" >&2
@@ -137,7 +149,13 @@ sudo "$APP_ROOT/tools/configure_gps.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_operator_auth.sh" "$APP_ROOT/tools/setup_operator_auth.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_connectivity.sh" "$APP_ROOT/tools/setup_connectivity.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" "$APP_ROOT/tools/n0jcg-usb-gadget.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget-remove.sh" "$APP_ROOT/tools/n0jcg-usb-gadget-remove.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-network.sh" "$APP_ROOT/tools/n0jcg-usb-network.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/tools/n0jcg-network-fallback.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget.sh" /usr/local/sbin/n0jcg-usb-gadget.sh
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-gadget-remove.sh" /usr/local/sbin/n0jcg-usb-gadget-remove.sh
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-network.sh" /usr/local/sbin/n0jcg-usb-network.sh
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" /usr/local/sbin/n0jcg-network-fallback.sh
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_operator_settings.py" "$APP_ROOT/tools/apply_operator_settings.py"
 sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
@@ -150,7 +168,7 @@ sudo install -m 0755 "$REPO_ROOT/tools/wes_apply_gain.py" /usr/local/sbin/n0jcg-
 sudo install -m 0755 "$REPO_ROOT/tools/wes_audio_device.py" /usr/local/sbin/n0jcg-wes-audio-device
 sudo install -m 0755 "$REPO_ROOT/tools/agwpe_identity_bridge.py" "$APP_ROOT/tools/agwpe_identity_bridge.py"
 # Normalize the service helpers after their final installation location is set.
-for helper in /usr/local/sbin/n0jcg-wes-* "$APP_ROOT"/tools/*.py "$APP_ROOT"/tools/*.sh; do
+for helper in /usr/local/sbin/n0jcg-network-fallback.sh /usr/local/sbin/n0jcg-usb-gadget.sh /usr/local/sbin/n0jcg-wes-* "$APP_ROOT"/tools/*.py "$APP_ROOT"/tools/*.sh; do
     [[ -f "$helper" ]] && sudo sed -i 's/\r$//' "$helper"
 done
 sudo bash "$APP_ROOT/tools/setup_digirig.sh"
@@ -186,6 +204,9 @@ DIREWOLF_BIN="$(command -v direwolf)"
 echo "PASS: Dire Wolf available at $DIREWOLF_BIN"
 sudo install -m 0644 "$REPO_ROOT/config/direwolf-n0jcg.conf.example" "$APP_ROOT/config/direwolf-n0jcg.conf.example"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" "$APP_ROOT/tools/n0jcg-usb-gadget.service"
+sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-network.service" "$APP_ROOT/tools/n0jcg-usb-network.service"
+sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-gadget.service" /etc/systemd/system/n0jcg-usb-gadget.service
+sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-usb-network.service" /etc/systemd/system/n0jcg-usb-network.service
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-network-fallback.service" "$APP_ROOT/tools/n0jcg-network-fallback.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-direwolf.service" "$APP_ROOT/tools/n0jcg-direwolf.service"
 sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" "$APP_ROOT/tools/n0jcg-agwpe-identity-bridge.service"
@@ -208,6 +229,7 @@ sudo systemctl enable n0jcg-webmail.service
 sudo systemctl restart n0jcg-webmail.service
 sudo systemctl daemon-reload
 sudo systemctl enable n0jcg-agwpe-identity-bridge.service
+sudo systemctl enable n0jcg-usb-gadget.service n0jcg-usb-network.service
 sudo systemctl restart n0jcg-agwpe-identity-bridge.service
 if ! grep -q 'PAT_TELNET_URL' "$APP_ROOT/api/n0jcg_webmail.py"; then
     echo "FAIL: installed webmail API is missing the current Pat authentication revision" >&2

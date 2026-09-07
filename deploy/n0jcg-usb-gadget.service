@@ -1,13 +1,13 @@
 [Unit]
 Description=N0JCG Winlink USB Ethernet gadget
 After=local-fs.target systemd-modules-load.service
-Wants=network-pre.target
-Before=network-pre.target
+Before=n0jcg-usb-network.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/sbin/n0jcg-usb-gadget.sh
+ExecStop=/usr/local/sbin/n0jcg-usb-gadget-remove.sh
 
 [Install]
 WantedBy=multi-user.target

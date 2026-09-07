@@ -51,7 +51,7 @@ detect_network_backend() {
 }
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y network-manager
+DEBIAN_FRONTEND=noninteractive apt-get install -y network-manager dnsmasq iptables
 systemctl enable --now NetworkManager.service
 install -d -m 0755 "$CONFIG_DIR"
 
@@ -130,9 +130,12 @@ nmcli connection add type ethernet ifname usb0 con-name "$USB_CONNECTION"
 nmcli connection modify "$USB_CONNECTION" ipv4.method shared ipv4.addresses "$USB_ADDRESS" ipv6.method disabled connection.autoconnect yes
 
 install -m 0755 "$(dirname "$0")/n0jcg-usb-gadget.sh" /usr/local/sbin/n0jcg-usb-gadget.sh
+install -m 0755 "$(dirname "$0")/n0jcg-usb-gadget-remove.sh" /usr/local/sbin/n0jcg-usb-gadget-remove.sh
+install -m 0755 "$(dirname "$0")/n0jcg-usb-network.sh" /usr/local/sbin/n0jcg-usb-network.sh
 install -m 0755 "$(dirname "$0")/n0jcg-network-fallback.sh" /usr/local/sbin/n0jcg-network-fallback.sh
 sed 's/@APP_USER@/'"${N0JCG_APP_USER:-pi}"'/g' "$(dirname "$0")/n0jcg-usb-gadget.service" > /etc/systemd/system/n0jcg-usb-gadget.service
 install -m 0644 "$(dirname "$0")/n0jcg-network-fallback.service" /etc/systemd/system/n0jcg-network-fallback.service
+install -m 0644 "$(dirname "$0")/n0jcg-usb-network.service" /etc/systemd/system/n0jcg-usb-network.service
 
 BOOT_CONFIG="/boot/firmware/config.txt"
 [[ -f "$BOOT_CONFIG" ]] || BOOT_CONFIG="/boot/config.txt"
@@ -146,8 +149,9 @@ if [[ -f "$CMDLINE" ]] && ! grep -q 'modules-load=.*dwc2' "$CMDLINE"; then
 fi
 
 systemctl daemon-reload
-systemctl enable n0jcg-usb-gadget.service n0jcg-network-fallback.service
+systemctl enable n0jcg-usb-gadget.service n0jcg-usb-network.service n0jcg-network-fallback.service
 systemctl restart n0jcg-usb-gadget.service || true
+systemctl restart n0jcg-usb-network.service || true
 systemctl restart n0jcg-network-fallback.service
 echo "PASS: Wi-Fi and fallback hotspot configured"
 echo "INFO: hotspot is $AP_SSID at $AP_ADDRESS with leases $AP_DHCP_RANGE"

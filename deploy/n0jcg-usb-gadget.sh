@@ -36,8 +36,11 @@ if [[ -n "$(cat UDC 2>/dev/null || true)" ]]; then
     echo "" > UDC
 fi
 
-echo 0x1d6b > idVendor
-echo 0x0104 > idProduct
+# Use the Raspberry Pi RNDIS identity covered by the Raspberry Pi Windows INF.
+# This is a Windows compatibility workaround; the N0JCG product strings remain
+# visible to the operator while the USB identity matches the installed driver.
+echo 0x2e8a > idVendor
+echo 0x0013 > idProduct
 echo 0x0200 > bcdUSB
 echo 0x0100 > bcdDevice
 [[ -d strings/0x409 ]] || mkdir -p strings/0x409
@@ -66,15 +69,25 @@ fi
 
 # Advertise the Microsoft RNDIS signature so Windows initializes the
 # network function instead of treating it as an ambiguous composite device.
-[[ -d os_desc ]] || mkdir os_desc
-[[ -d os_desc/interface.rndis ]] || mkdir os_desc/interface.rndis
-echo 1 > os_desc/use
-echo 0xcd > os_desc/b_vendor_code
-echo MSFT100 > os_desc/qw_sign
-echo RNDIS > os_desc/interface.rndis/compatible_id
-if [[ ! -e os_desc/c.1 && ! -L os_desc/c.1 ]]; then
-    ln -s configs/c.1 os_desc/c.1
+# The RNDIS compatible-id group is created by usb_f_rndis under the function;
+# this vendor kernel rejects a second interface.rndis group at gadget root.
+if [[ "$USB_FUNCTION" == "rndis.usb0" ]]; then
+    RNDIS_OS_DESC="functions/rndis.usb0/os_desc/interface.rndis"
+    if [[ ! -d "$RNDIS_OS_DESC" ]]; then
+        echo "N0JCG USB gadget: RNDIS OS descriptor group is unavailable." >&2
+        exit 1
+    fi
+    [[ -d os_desc ]] || mkdir os_desc
+    echo 0xcd > os_desc/b_vendor_code
+    echo MSFT100 > os_desc/qw_sign
+    echo RNDIS > "$RNDIS_OS_DESC/compatible_id"
+    if [[ ! -e os_desc/c.1 && ! -L os_desc/c.1 ]]; then
+        ln -s configs/c.1 os_desc/c.1
+    fi
+    # The configuration must be linked before OS descriptors are enabled.
+    echo 1 > os_desc/use
 fi
+udevadm settle -t 5 2>/dev/null || true
 echo "$UDC" > UDC
 
 for _ in {1..20}; do
@@ -82,11 +95,4 @@ for _ in {1..20}; do
     sleep 0.25
 done
 
-# NetworkManager may refuse activation until Windows reports carrier. Apply
-# the address directly as a fallback so the link can initialize afterward.
-if command -v nmcli >/dev/null 2>&1 && nmcli connection show "n0jcg-usb-gadget" >/dev/null 2>&1; then
-    nmcli connection up "n0jcg-usb-gadget" || true
-fi
-ip link set usb0 up || true
-ip addr replace 192.168.60.1/24 dev usb0 || true
-echo "N0JCG USB Ethernet gadget active at 192.168.60.1."
+echo "N0JCG USB Ethernet gadget active on $UDC."
