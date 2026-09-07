@@ -69,6 +69,8 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("refresh_cache", cache_refresh)
         self.assertIn("winlink_templates.py", cache_refresh)
         self.assertIn("existing cache was preserved", cache_refresh)
+        self.assertIn("internet unavailable; skipping", cache_refresh)
+        self.assertNotIn('result[\\"count\\"]', cache_refresh)
         self.assertIn("n0jcg-usb-gadget-remove.sh", installer)
         self.assertIn("n0jcg-usb-network.sh", installer)
         self.assertIn("n0jcg-usb-network.service", installer)
