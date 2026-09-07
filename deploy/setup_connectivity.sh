@@ -127,7 +127,7 @@ nmcli connection add type wifi ifname "$WIFI_DEVICE" con-name "$HOTSPOT_CONNECTI
 nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.mode ap 802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASSWORD" ipv4.method shared ipv4.addresses "$AP_ADDRESS" ipv4.shared-dhcp-range "$AP_DHCP_RANGE" ipv6.method disabled connection.autoconnect no
 
 nmcli connection add type ethernet ifname usb0 con-name "$USB_CONNECTION"
-nmcli connection modify "$USB_CONNECTION" ipv4.method shared ipv4.addresses "$USB_ADDRESS" ipv6.method disabled connection.autoconnect yes
+nmcli connection modify "$USB_CONNECTION" ipv4.method disabled ipv6.method disabled connection.autoconnect no
 
 install -m 0755 "$(dirname "$0")/n0jcg-usb-gadget.sh" /usr/local/sbin/n0jcg-usb-gadget.sh
 install -m 0755 "$(dirname "$0")/n0jcg-usb-gadget-remove.sh" /usr/local/sbin/n0jcg-usb-gadget-remove.sh

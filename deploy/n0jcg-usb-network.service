@@ -5,9 +5,8 @@ After=n0jcg-usb-gadget.service NetworkManager.service
 Wants=NetworkManager.service
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStart=/usr/local/sbin/n0jcg-usb-network.sh
-RemainAfterExit=yes
 Restart=on-failure
 RestartSec=5
 

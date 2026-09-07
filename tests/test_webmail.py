@@ -106,7 +106,11 @@ class WebmailHelpersTests(unittest.TestCase):
         usb_network_service = (ROOT / "deploy" / "n0jcg-usb-network.service").read_text(encoding="utf-8")
         gadget_service = (ROOT / "deploy" / "n0jcg-usb-gadget.service").read_text(encoding="utf-8")
         self.assertIn("printf '' > \"$GADGET/UDC\"", remove)
-        self.assertIn('nmcli connection up "$USB_CONNECTION" ifname "$USB_DEVICE"', usb_network)
+        self.assertIn('nmcli device set "$USB_DEVICE" managed no', usb_network)
+        self.assertIn('exec dnsmasq', usb_network)
+        self.assertIn('--dhcp-range="$DHCP_RANGE"', usb_network)
+        self.assertIn('ipv4.method disabled', usb_network)
+        self.assertIn("Type=simple", usb_network_service)
         self.assertIn("Restart=on-failure", usb_network_service)
         self.assertIn("ExecStop=/usr/local/sbin/n0jcg-usb-gadget-remove.sh", gadget_service)
 
