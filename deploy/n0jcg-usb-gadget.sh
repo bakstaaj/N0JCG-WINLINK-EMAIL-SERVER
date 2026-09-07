@@ -27,7 +27,7 @@ mkdir -p "$GADGET"
 cd "$GADGET"
 
 if [[ -n "$(cat UDC 2>/dev/null || true)" ]]; then
-    if [[ -f os_desc/use ]]; then
+    if [[ -e os_desc/use ]]; then
         echo "N0JCG USB gadget is already active."
         exit 0
     fi
@@ -40,32 +40,41 @@ echo 0x1d6b > idVendor
 echo 0x0104 > idProduct
 echo 0x0200 > bcdUSB
 echo 0x0100 > bcdDevice
-mkdir -p strings/0x409
+[[ -d strings/0x409 ]] || mkdir -p strings/0x409
 echo N0JCG > strings/0x409/manufacturer
 echo PI-WINLINK > strings/0x409/product
 echo 0123456789 > strings/0x409/serialnumber
-mkdir -p configs/c.1/strings/0x409
+[[ -d configs/c.1/strings/0x409 ]] || mkdir -p configs/c.1/strings/0x409
 echo "N0JCG Winlink USB network" > configs/c.1/strings/0x409/configuration
 echo 250 > configs/c.1/MaxPower
 USB_FUNCTION=""
-if mkdir -p functions/rndis.usb0; then
+if [[ -d functions/rndis.usb0 ]]; then
     USB_FUNCTION="rndis.usb0"
+elif mkdir -p functions/rndis.usb0; then
+    USB_FUNCTION="rndis.usb0"
+elif [[ -d functions/ecm.usb0 ]]; then
+    USB_FUNCTION="ecm.usb0"
 elif mkdir -p functions/ecm.usb0; then
     USB_FUNCTION="ecm.usb0"
 else
     echo "N0JCG USB gadget: this kernel provides neither RNDIS nor ECM." >&2
     exit 1
 fi
-ln -sf "functions/$USB_FUNCTION" configs/c.1/
+if [[ ! -e "configs/c.1/$USB_FUNCTION" && ! -L "configs/c.1/$USB_FUNCTION" ]]; then
+    ln -s "functions/$USB_FUNCTION" "configs/c.1/$USB_FUNCTION"
+fi
 
 # Advertise the Microsoft RNDIS signature so Windows initializes the
 # network function instead of treating it as an ambiguous composite device.
-mkdir -p os_desc/interface.rndis
+[[ -d os_desc ]] || mkdir os_desc
+[[ -d os_desc/interface.rndis ]] || mkdir os_desc/interface.rndis
 echo 1 > os_desc/use
 echo 0xcd > os_desc/b_vendor_code
 echo MSFT100 > os_desc/qw_sign
 echo RNDIS > os_desc/interface.rndis/compatible_id
-ln -sfn configs/c.1 os_desc/
+if [[ ! -e os_desc/c.1 && ! -L os_desc/c.1 ]]; then
+    ln -s configs/c.1 os_desc/c.1
+fi
 echo "$UDC" > UDC
 
 for _ in {1..20}; do

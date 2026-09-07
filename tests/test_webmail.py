@@ -82,6 +82,9 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("MSFT100", gadget)
         self.assertIn("ip addr replace 192.168.60.1/24 dev usb0", gadget)
         self.assertIn("xhci2-controller", gadget)
+        self.assertIn("[[ -d functions/rndis.usb0 ]]", gadget)
+        self.assertIn("[[ -e os_desc/use ]]", gadget)
+        self.assertIn("os_desc/c.1", gadget)
         self.assertIn("input=settings[\"operator_password\"]", helper)
 
     def test_address_book_is_callsign_scoped_and_available_in_compose(self):
