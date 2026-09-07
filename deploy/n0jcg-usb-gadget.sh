@@ -2,7 +2,16 @@
 set -euo pipefail
 
 GADGET=/sys/kernel/config/usb_gadget/n0jcg
-UDC="$(ls /sys/class/udc 2>/dev/null | head -n 1 || true)"
+UDC=""
+for candidate in /sys/class/udc/*xhci2-controller; do
+    if [[ -e "$candidate" ]]; then
+        UDC="$(basename "$candidate")"
+        break
+    fi
+done
+if [[ -z "$UDC" ]]; then
+    UDC="$(ls /sys/class/udc 2>/dev/null | head -n 1 || true)"
+fi
 
 if [[ -z "$UDC" ]]; then
     echo "N0JCG USB gadget: no USB device controller is available; use the Pi 4 USB-C power/data port." >&2
@@ -18,8 +27,13 @@ mkdir -p "$GADGET"
 cd "$GADGET"
 
 if [[ -n "$(cat UDC 2>/dev/null || true)" ]]; then
-    echo "N0JCG USB gadget is already active."
-    exit 0
+    if [[ -f os_desc/use ]]; then
+        echo "N0JCG USB gadget is already active."
+        exit 0
+    fi
+    # Upgrade an older gadget definition in place so RNDIS OS descriptors
+    # are applied on the next bind without requiring manual ConfigFS work.
+    echo "" > UDC
 fi
 
 echo 0x1d6b > idVendor
@@ -43,6 +57,15 @@ else
     exit 1
 fi
 ln -sf "functions/$USB_FUNCTION" configs/c.1/
+
+# Advertise the Microsoft RNDIS signature so Windows initializes the
+# network function instead of treating it as an ambiguous composite device.
+mkdir -p os_desc/interface.rndis
+echo 1 > os_desc/use
+echo 0xcd > os_desc/b_vendor_code
+echo MSFT100 > os_desc/qw_sign
+echo RNDIS > os_desc/interface.rndis/compatible_id
+ln -sfn configs/c.1 os_desc/
 echo "$UDC" > UDC
 
 for _ in {1..20}; do
@@ -50,10 +73,11 @@ for _ in {1..20}; do
     sleep 0.25
 done
 
+# NetworkManager may refuse activation until Windows reports carrier. Apply
+# the address directly as a fallback so the link can initialize afterward.
 if command -v nmcli >/dev/null 2>&1 && nmcli connection show "n0jcg-usb-gadget" >/dev/null 2>&1; then
     nmcli connection up "n0jcg-usb-gadget" || true
-else
-    ip link set usb0 up || true
-    ip addr replace 192.168.60.1/24 dev usb0 || true
 fi
+ip link set usb0 up || true
+ip addr replace 192.168.60.1/24 dev usb0 || true
 echo "N0JCG USB Ethernet gadget active at 192.168.60.1."
