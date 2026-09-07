@@ -40,6 +40,7 @@ if [[ "${1:-}" == "--check-only" ]]; then
     test -f "$REPO_ROOT/deploy/n0jcg-usb-network.sh"
     test -f "$REPO_ROOT/deploy/n0jcg-usb-network.service"
     test -f "$REPO_ROOT/deploy/n0jcg-network-fallback.sh"
+    test -f "$REPO_ROOT/deploy/refresh_install_caches.sh"
     test -f "$REPO_ROOT/deploy/apply_operator_settings.py"
     test -f "$REPO_ROOT/deploy/configure_packet_radio.sh"
     test -f "$REPO_ROOT/deploy/setup_digirig.sh"
@@ -158,6 +159,7 @@ sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-usb-network.sh" /usr/local/sbin/n0
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" /usr/local/sbin/n0jcg-network-fallback.sh
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_operator_settings.py" "$APP_ROOT/tools/apply_operator_settings.py"
 sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/refresh_install_caches.sh" "$APP_ROOT/tools/refresh_install_caches.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_digirig.sh" "$APP_ROOT/tools/setup_digirig.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-gps-rf-guard.sh" /usr/local/sbin/n0jcg-gps-rf-guard
@@ -227,6 +229,7 @@ sudo systemctl reload nginx
 sudo systemctl daemon-reload
 sudo systemctl enable n0jcg-webmail.service
 sudo systemctl restart n0jcg-webmail.service
+sudo env N0JCG_APP_ROOT="$APP_ROOT" N0JCG_APP_USER="$APP_USER" bash "$APP_ROOT/tools/refresh_install_caches.sh"
 sudo systemctl daemon-reload
 sudo systemctl enable n0jcg-agwpe-identity-bridge.service
 sudo systemctl enable n0jcg-usb-gadget.service n0jcg-usb-network.service
