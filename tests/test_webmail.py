@@ -109,7 +109,7 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('nmcli device set "$USB_DEVICE" managed no', usb_network)
         self.assertIn('exec dnsmasq', usb_network)
         self.assertIn('--dhcp-range="$DHCP_RANGE"', usb_network)
-        self.assertIn('ipv4.method disabled', usb_network)
+        self.assertIn('ipv4.addresses "" ipv4.method disabled', usb_network)
         self.assertIn("Type=simple", usb_network_service)
         self.assertIn("Restart=on-failure", usb_network_service)
         self.assertIn("ExecStop=/usr/local/sbin/n0jcg-usb-gadget-remove.sh", gadget_service)

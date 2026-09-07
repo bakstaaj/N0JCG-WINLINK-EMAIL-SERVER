@@ -19,7 +19,7 @@ ip link show dev "$USB_DEVICE" >/dev/null 2>&1 || {
 # not actually lower-up. Keep NetworkManager away from this interface and own
 # the static peer address and DHCP process here instead.
 nmcli connection down "$USB_CONNECTION" >/dev/null 2>&1 || true
-nmcli connection modify "$USB_CONNECTION" ipv4.method disabled connection.autoconnect no >/dev/null 2>&1 || true
+nmcli connection modify "$USB_CONNECTION" ipv4.addresses "" ipv4.method disabled connection.autoconnect no >/dev/null 2>&1 || true
 nmcli device set "$USB_DEVICE" managed no >/dev/null 2>&1 || true
 
 ip link set "$USB_DEVICE" up
