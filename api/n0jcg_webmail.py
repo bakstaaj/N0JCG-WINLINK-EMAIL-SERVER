@@ -1242,6 +1242,42 @@ def operator_connectivity():
                 config[key] = value.strip().strip("'\"")
     except OSError:
         pass
+    # Older installations did not persist the infrastructure Wi-Fi SSID in
+    # network.conf. Read it from the active NetworkManager profile when it is
+    # available so the operator panel still shows the current network.
+    if not config.get("N0JCG_WIFI_SSID"):
+        try:
+            active = subprocess.run(
+                ["nmcli", "-t", "-f", "DEVICE,TYPE,CONNECTION", "device", "status"],
+                capture_output=True, text=True, timeout=5,
+            )
+            connection = ""
+            for line in active.stdout.splitlines():
+                fields = line.split(":", 2)
+                if len(fields) == 3 and fields[1] == "wifi" and fields[2] != "--":
+                    connection = fields[2]
+                    break
+            if connection:
+                profile = subprocess.run(
+                    ["nmcli", "-g", "802-11-wireless.ssid", "connection", "show", connection],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if profile.stdout.strip():
+                    config["N0JCG_WIFI_SSID"] = profile.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    operator_user = ""
+    try:
+        for line in Path("/etc/n0jcg-winlink/operator.conf").read_text(encoding="utf-8").splitlines():
+            if line.startswith("N0JCG_OPERATOR_USER="):
+                operator_user = line.split("=", 1)[1].strip().strip("'\"")
+                break
+    except OSError:
+        try:
+            first = Path("/etc/nginx/.htpasswd-n0jcg-winlink").read_text(encoding="utf-8").splitlines()[0]
+            operator_user = first.split(":", 1)[0] if ":" in first else ""
+        except (OSError, IndexError):
+            pass
     def active(service):
         return subprocess.run(["systemctl", "is-active", "--quiet", service], capture_output=True).returncode == 0
     def enabled(service):
@@ -1249,38 +1285,39 @@ def operator_connectivity():
     return {
         "wifi_ssid": config.get("N0JCG_WIFI_SSID", ""),
         "wifi_device": config.get("N0JCG_WIFI_DEVICE", ""),
+        "wifi_disabled": config.get("N0JCG_WIFI_DISABLED", "0") == "1",
         "hotspot_ssid": config.get("N0JCG_AP_SSID", "N0JCG-WES"),
         "auto_hotspot": config.get("N0JCG_AUTO_HOTSPOT", "1") == "1",
         "hotspot_active": active("n0jcg-network-fallback.service"),
         "usb_gadget_enabled": enabled("n0jcg-usb-gadget.service"),
         "usb_gadget_active": active("n0jcg-usb-gadget.service"),
         "operator_auth_configured": Path("/etc/nginx/.htpasswd-n0jcg-winlink").exists(),
+        "operator_user": operator_user,
     }
 
 
 def apply_operator_settings(data):
+    operation = str(data.get("operation") or "network")
     settings = {
+        "operation": operation,
         "wifi_ssid": str(data.get("wifi_ssid") or "").strip(),
         "wifi_password": str(data.get("wifi_password") or ""),
-        "hotspot_ssid": str(data.get("hotspot_ssid") or "N0JCG-WES").strip(),
+        "hotspot_ssid": str(data.get("hotspot_ssid") or "").strip(),
         "hotspot_password": str(data.get("hotspot_password") or ""),
-        "auto_hotspot": bool(data.get("auto_hotspot", True)),
-        "usb_gadget": bool(data.get("usb_gadget", True)),
+        "auto_hotspot": data.get("auto_hotspot"),
+        "disable_wifi": data.get("disable_wifi"),
+        "usb_gadget": data.get("usb_gadget"),
         "operator_user": str(data.get("operator_user") or "").strip(),
         "operator_password": str(data.get("operator_password") or ""),
     }
-    if settings["wifi_ssid"] and len(settings["wifi_password"]) < 8:
-        raise ValueError("Wi-Fi password must be at least 8 characters")
-    if settings["hotspot_password"] and len(settings["hotspot_password"]) < 8:
-        raise ValueError("hotspot password must be at least 8 characters")
-    if settings["operator_user"] and len(settings["operator_password"]) < 8:
-        raise ValueError("operator password must be at least 8 characters")
+    if operation not in {"network", "auth"}:
+        raise ValueError("unknown operator settings operation")
     STATE_DIR.mkdir(mode=0o750, parents=True, exist_ok=True)
     request = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=STATE_DIR, prefix="operator-settings-", suffix=".json", delete=False)
     try:
         json.dump(settings, request)
         request.close()
-        result = subprocess.run(["sudo", "-n", "python3", OPERATOR_SETTINGS_SCRIPT, request.name], capture_output=True, text=True, timeout=45)
+        result = subprocess.run(["sudo", "-n", OPERATOR_SETTINGS_SCRIPT, request.name], capture_output=True, text=True, timeout=45)
     finally:
         try:
             Path(request.name).unlink()
@@ -1528,7 +1565,11 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.send_json(HTTPStatus.OK, {"saved": True, "profile": payload})
                 return
-            if self.path == "/api/v1/operator/settings":
+            if self.path in {"/api/v1/operator/settings", "/api/v1/operator/network", "/api/v1/operator/auth"}:
+                if self.path.endswith("/network"):
+                    data["operation"] = "network"
+                elif self.path.endswith("/auth"):
+                    data["operation"] = "auth"
                 try:
                     payload = apply_operator_settings(data)
                 except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
@@ -1755,7 +1796,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/v1/operator/radio-profile":
             self.send_json(HTTPStatus.OK, {"profile": radio_profile()})
             return
-        if self.path == "/api/v1/operator/settings":
+        if self.path in {"/api/v1/operator/settings", "/api/v1/operator/network", "/api/v1/operator/auth"}:
             self.send_json(HTTPStatus.OK, {"settings": operator_connectivity()})
             return
         if self.path == "/api/v1/operator/registration":

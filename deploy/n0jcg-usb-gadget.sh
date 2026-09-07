@@ -9,8 +9,11 @@ if [[ -z "$UDC" ]]; then
     exit 0
 fi
 
+modprobe configfs 2>/dev/null || true
 modprobe libcomposite
+mkdir -p /sys/kernel/config
 mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
+mkdir -p /sys/kernel/config/usb_gadget
 mkdir -p "$GADGET"
 cd "$GADGET"
 

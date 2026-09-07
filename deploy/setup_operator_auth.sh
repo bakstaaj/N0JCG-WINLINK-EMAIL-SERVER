@@ -50,6 +50,9 @@ fi
 printf '%s\n' "$OPERATOR_PASSWORD" | sudo htpasswd -iB -c "$AUTH_FILE" "$OPERATOR_USER"
 sudo chmod 0640 "$AUTH_FILE"
 sudo chown root:www-data "$AUTH_FILE"
+sudo install -d -m 0755 /etc/n0jcg-winlink
+printf 'N0JCG_OPERATOR_USER=%q\n' "$OPERATOR_USER" | sudo tee /etc/n0jcg-winlink/operator.conf >/dev/null
+sudo chmod 0644 /etc/n0jcg-winlink/operator.conf
 sudo install -d -m 0755 /etc/nginx/snippets
 sudo sh -c "cat > '$AUTH_SNIPPET' <<'EOF'
 auth_basic \"N0JCG Winlink Email Server operator console\";

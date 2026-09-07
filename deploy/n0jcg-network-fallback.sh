@@ -25,6 +25,7 @@ if [[ -z "$WIFI_DEVICE" ]]; then
 fi
 
 wifi_is_ready() {
+    [[ "${N0JCG_WIFI_DISABLED:-0}" != "1" ]] || return 1
     [[ -n "$WIFI_DEVICE" ]] && \
         ip link show dev "$WIFI_DEVICE" >/dev/null 2>&1 && \
         ip -4 addr show dev "$WIFI_DEVICE" 2>/dev/null | grep -q 'inet ' && \
@@ -37,6 +38,13 @@ ensure_network_state() {
         return 0
     fi
     if nmcli connection show "$HOTSPOT_CONNECTION" >/dev/null 2>&1; then
+        # Keep the live NetworkManager profile aligned with the operator's
+        # saved configuration before bringing the fallback AP up. This also
+        # repairs profiles created by older installers that still advertise
+        # the original default SSID.
+        if [[ -n "${N0JCG_AP_SSID:-}" ]]; then
+            nmcli connection modify "$HOTSPOT_CONNECTION" 802-11-wireless.ssid "$N0JCG_AP_SSID" >/dev/null 2>&1 || true
+        fi
         nmcli connection up "$HOTSPOT_CONNECTION" ifname "$WIFI_DEVICE" >/dev/null 2>&1 || true
     fi
 }

@@ -241,6 +241,16 @@ else
     echo "PASS: existing operator authentication preserved"
 fi
 
+# Backfill metadata on upgrades from releases that predated operator.conf.
+# Store only the username; never copy the password hash into this file.
+if [[ -f /etc/nginx/.htpasswd-n0jcg-winlink && ! -f /etc/n0jcg-winlink/operator.conf ]]; then
+    EXISTING_OPERATOR_USER="$(sudo awk -F: 'NR == 1 { print $1; exit }' /etc/nginx/.htpasswd-n0jcg-winlink)"
+    if [[ -n "$EXISTING_OPERATOR_USER" ]]; then
+        printf 'N0JCG_OPERATOR_USER=%q\n' "$EXISTING_OPERATOR_USER" | sudo tee /etc/n0jcg-winlink/operator.conf >/dev/null
+        sudo chmod 0644 /etc/n0jcg-winlink/operator.conf
+    fi
+fi
+
 echo "PASS: N0JCG Winlink Email Server installed at http://$(hostname -I | awk '{print $1}')/webmail/"
 echo "INFO: operator console is available at http://$(hostname -I | awk '{print $1}')/ui/"
 echo "INFO: installation complete; scheduling a system reboot."
