@@ -6,6 +6,8 @@ Before=n0jcg-usb-network.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
 ExecStart=/usr/local/sbin/n0jcg-usb-gadget.sh
 ExecStop=/usr/local/sbin/n0jcg-usb-gadget-remove.sh
 
