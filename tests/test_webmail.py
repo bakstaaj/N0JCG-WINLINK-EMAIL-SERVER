@@ -75,6 +75,9 @@ class WebmailHelpersTests(unittest.TestCase):
         gadget = (ROOT / "deploy" / "n0jcg-usb-gadget.sh").read_text(encoding="utf-8")
         self.assertIn("mkdir -p /sys/kernel/config", gadget)
         self.assertIn("modprobe configfs", gadget)
+        self.assertIn("functions/rndis.usb0", gadget)
+        self.assertIn("functions/ecm.usb0", gadget)
+        self.assertIn('USB_FUNCTION="rndis.usb0"', gadget)
         self.assertIn("input=settings[\"operator_password\"]", helper)
 
     def test_address_book_is_callsign_scoped_and_available_in_compose(self):

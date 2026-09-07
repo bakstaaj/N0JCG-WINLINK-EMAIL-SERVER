@@ -33,8 +33,16 @@ echo 0123456789 > strings/0x409/serialnumber
 mkdir -p configs/c.1/strings/0x409
 echo "N0JCG Winlink USB network" > configs/c.1/strings/0x409/configuration
 echo 250 > configs/c.1/MaxPower
-mkdir -p functions/ecm.usb0
-ln -sf functions/ecm.usb0 configs/c.1/
+USB_FUNCTION=""
+if mkdir -p functions/rndis.usb0; then
+    USB_FUNCTION="rndis.usb0"
+elif mkdir -p functions/ecm.usb0; then
+    USB_FUNCTION="ecm.usb0"
+else
+    echo "N0JCG USB gadget: this kernel provides neither RNDIS nor ECM." >&2
+    exit 1
+fi
+ln -sf "functions/$USB_FUNCTION" configs/c.1/
 echo "$UDC" > UDC
 
 for _ in {1..20}; do
