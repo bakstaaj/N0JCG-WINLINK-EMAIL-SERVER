@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 CONFIG = pathlib.Path("/etc/n0jcg-winlink/network.conf")
+SECRETS = pathlib.Path("/etc/n0jcg-winlink/network-secrets.conf")
 AUTH_FILE = pathlib.Path("/etc/nginx/.htpasswd-n0jcg-winlink")
 AUTH_SNIPPET = pathlib.Path("/etc/nginx/snippets/n0jcg-winlink-auth.conf.optional")
 OPERATOR_META = pathlib.Path("/etc/n0jcg-winlink/operator.conf")
@@ -36,13 +37,25 @@ def connection_active(name):
 
 
 def read_config():
+    return read_values(CONFIG)
+
+
+def read_values(path):
     values = {}
-    if CONFIG.exists():
-        for line in CONFIG.read_text(encoding="utf-8").splitlines():
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if "=" in line:
                 key, value = line.split("=", 1)
-                values[key] = value.strip().strip("'\"")
+                try:
+                    parsed = shlex.split(value, posix=True)
+                    values[key] = parsed[0] if parsed else ""
+                except ValueError:
+                    values[key] = value.strip().strip("'\"")
     return values
+
+
+def read_secrets():
+    return read_values(SECRETS)
 
 
 def read_wifi_device(config):
@@ -56,21 +69,6 @@ def read_wifi_device(config):
     return ""
 
 
-def read_active_wifi_ssid():
-    """Read the active Wi-Fi SSID for upgrades with incomplete network.conf."""
-    result = nm("-t", "-f", "DEVICE,TYPE,CONNECTION", "device", "status", check=False)
-    if result.returncode != 0:
-        return ""
-    for line in result.stdout.splitlines():
-        fields = line.split(":", 2)
-        if len(fields) != 3 or fields[1] != "wifi" or fields[2] == "--":
-            continue
-        profile = nm("-g", "802-11-wireless.ssid", "connection", "show", fields[2], check=False)
-        if profile.returncode == 0 and profile.stdout.strip():
-            return profile.stdout.strip()
-    return ""
-
-
 def validate(data, operation, current):
     def text(name):
         value = data.get(name)
@@ -79,9 +77,12 @@ def validate(data, operation, current):
     if operation == "network":
         wifi_ssid, wifi_password = text("wifi_ssid"), text("wifi_password")
         hotspot_ssid, hotspot_password = text("hotspot_ssid"), text("hotspot_password")
-        current_wifi_ssid = current.get("N0JCG_WIFI_SSID", "") or read_active_wifi_ssid()
+        current_wifi_ssid = current.get("N0JCG_WIFI_SSID", "")
         if wifi_ssid and wifi_ssid != current_wifi_ssid and len(wifi_password) < 8:
             raise ValueError("Wi-Fi password is required when changing the Wi-Fi SSID")
+        current_hotspot_ssid = current.get("N0JCG_AP_SSID", "N0JCG-WES")
+        if hotspot_ssid and hotspot_ssid != current_hotspot_ssid and len(hotspot_password) < 8:
+            raise ValueError("hotspot password is required when changing the hotspot SSID")
         if hotspot_password and len(hotspot_password) < 8:
             raise ValueError("hotspot password must be at least 8 characters")
         for label, value in (("Wi-Fi SSID", wifi_ssid), ("hotspot SSID", hotspot_ssid)):
@@ -109,28 +110,39 @@ def write_config(values):
     os.chmod(CONFIG, 0o600)
 
 
+def write_secrets(values):
+    merged = read_secrets()
+    merged.update({key: value for key, value in values.items() if key in {"N0JCG_WIFI_PASSWORD", "N0JCG_AP_PASSWORD"}})
+    SECRETS.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+    SECRETS.write_text("\n".join(f"{key}={shlex.quote(value)}" for key, value in merged.items()) + "\n", encoding="utf-8")
+    os.chmod(SECRETS, 0o600)
+
+
 def apply_network(settings):
     current = read_config()
+    secrets = read_secrets()
     wifi_device = read_wifi_device(current)
     wifi_ssid = settings["wifi_ssid"] or current.get("N0JCG_WIFI_SSID", "")
+    wifi_password = settings["wifi_password"] or secrets.get("N0JCG_WIFI_PASSWORD", "")
     current_hotspot_ssid = current.get("N0JCG_AP_SSID", "N0JCG-WES")
     hotspot_changed = bool(settings["hotspot_ssid"] and settings["hotspot_ssid"] != current_hotspot_ssid)
+    hotspot_ssid = settings["hotspot_ssid"] or current_hotspot_ssid
+    hotspot_password = settings["hotspot_password"] or secrets.get("N0JCG_AP_PASSWORD", "")
     wifi_disabled = settings["disable_wifi"] is True
     wifi_connection = current.get("N0JCG_WIFI_CONNECTION", "")
     if settings["wifi_ssid"] and wifi_device and not wifi_disabled:
         if not connection_exists(WIFI_CONNECTION):
             nm("connection", "add", "type", "wifi", "ifname", wifi_device, "con-name", WIFI_CONNECTION, "ssid", wifi_ssid)
-        if settings["wifi_password"]:
-            nm("connection", "modify", WIFI_CONNECTION, "802-11-wireless.ssid", wifi_ssid, "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", settings["wifi_password"], "connection.autoconnect", "yes")
+        if wifi_password:
+            nm("connection", "modify", WIFI_CONNECTION, "802-11-wireless.ssid", wifi_ssid, "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", wifi_password, "connection.autoconnect", "yes")
         else:
             nm("connection", "modify", WIFI_CONNECTION, "802-11-wireless.ssid", wifi_ssid, "connection.autoconnect", "yes")
         nm("connection", "up", WIFI_CONNECTION, "ifname", wifi_device, check=False)
     hotspot_was_active = connection_exists(HOTSPOT_CONNECTION) and connection_active(HOTSPOT_CONNECTION)
     if connection_exists(HOTSPOT_CONNECTION):
-        hotspot_ssid = settings["hotspot_ssid"] or current_hotspot_ssid
         nm("connection", "modify", HOTSPOT_CONNECTION, "802-11-wireless.ssid", hotspot_ssid)
-        if settings["hotspot_password"]:
-            nm("connection", "modify", HOTSPOT_CONNECTION, "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", settings["hotspot_password"])
+        if hotspot_password:
+            nm("connection", "modify", HOTSPOT_CONNECTION, "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", hotspot_password)
         nm("connection", "modify", HOTSPOT_CONNECTION, "connection.autoconnect", "no")
     values = {"N0JCG_WIFI_DEVICE": wifi_device, "N0JCG_WIFI_SSID": wifi_ssid, "N0JCG_NETWORK_BACKEND": "networkmanager"}
     if settings["hotspot_ssid"]:
@@ -140,6 +152,7 @@ def apply_network(settings):
     if settings["disable_wifi"] is not None:
         values["N0JCG_WIFI_DISABLED"] = "1" if wifi_disabled else "0"
     write_config(values)
+    write_secrets({"N0JCG_WIFI_PASSWORD": wifi_password, "N0JCG_AP_PASSWORD": hotspot_password})
     # Make the profile change visible to NetworkManager before cycling an
     # active AP. This matters on installs where the fallback service is
     # already watching the connection.
@@ -213,6 +226,20 @@ def apply_auth(settings):
 def main():
     if os.geteuid() != 0:
         raise SystemExit("FAIL: run as root")
+    if len(sys.argv) == 2 and sys.argv[1] == "--read-network":
+        config = read_config()
+        secrets = read_secrets()
+        print(json.dumps({
+            "wifi_ssid": config.get("N0JCG_WIFI_SSID", ""),
+            "wifi_password": secrets.get("N0JCG_WIFI_PASSWORD", ""),
+            "wifi_device": config.get("N0JCG_WIFI_DEVICE", ""),
+            "wifi_disabled": config.get("N0JCG_WIFI_DISABLED", "1") == "1",
+            "hotspot_ssid": config.get("N0JCG_AP_SSID", "N0JCG-WES"),
+            "hotspot_password": secrets.get("N0JCG_AP_PASSWORD", ""),
+            "auto_hotspot": config.get("N0JCG_AUTO_HOTSPOT", "1") == "1",
+            "usb_gadget_enabled": False,
+        }))
+        return
     request = pathlib.Path(sys.argv[1])
     try:
         data = json.loads(request.read_text(encoding="utf-8"))

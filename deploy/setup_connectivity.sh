@@ -92,6 +92,22 @@ fi
 AP_SSID="${N0JCG_AP_SSID:-N0JCG-WES}"
 AP_PASSWORD="${N0JCG_AP_PASSWORD:-Password}"
 
+# Capture the infrastructure Wi-Fi identity before replacing any connection
+# profiles. This remains the operator's saved LAN network while the hotspot
+# is active, so the UI never mistakes the active hotspot for the LAN.
+LAN_CONNECTION=""
+LAN_SSID="${N0JCG_WIFI_SSID:-}"
+LAN_PASSWORD="${N0JCG_WIFI_PASSWORD:-}"
+LAN_CONNECTION="$(nmcli -t -f DEVICE,TYPE,CONNECTION device status 2>/dev/null | awk -F: -v device="$WIFI_DEVICE" '$1 == device && $2 == "wifi" && $3 != "--" { print $3; exit }')"
+if [[ -n "$LAN_CONNECTION" && "$LAN_CONNECTION" != "$HOTSPOT_CONNECTION" ]]; then
+    if [[ -z "$LAN_SSID" ]]; then
+        LAN_SSID="$(nmcli -g 802-11-wireless.ssid connection show "$LAN_CONNECTION" 2>/dev/null || true)"
+    fi
+    if [[ -z "$LAN_PASSWORD" ]]; then
+        LAN_PASSWORD="$(nmcli -s -g 802-11-wireless-security.psk connection show "$LAN_CONNECTION" 2>/dev/null || true)"
+    fi
+fi
+
 if [[ "${1:-}" != "--noninteractive" && "$FROM_ENV" != "1" ]]; then
     AP_SSID="$(prompt_value 'Fallback hotspot SSID' "$AP_SSID")"
     printf 'Fallback hotspot password [%s] (change recommended): ' "$AP_PASSWORD"
@@ -118,8 +134,17 @@ N0JCG_AP_DHCP_RANGE=$AP_DHCP_RANGE
 N0JCG_USB_ADDRESS=$USB_ADDRESS
 N0JCG_WIFI_DISABLED=1
 N0JCG_AUTO_HOTSPOT=1
+N0JCG_WIFI_SSID=$(printf '%q' "$LAN_SSID")
+N0JCG_WIFI_CONNECTION=$(printf '%q' "$LAN_CONNECTION")
 EOF
 chmod 0600 "$CONFIG_FILE"
+
+SECRETS_FILE="$CONFIG_DIR/network-secrets.conf"
+cat > "$SECRETS_FILE" <<EOF
+N0JCG_WIFI_PASSWORD=$(printf '%q' "$LAN_PASSWORD")
+N0JCG_AP_PASSWORD=$(printf '%q' "$AP_PASSWORD")
+EOF
+chmod 0600 "$SECRETS_FILE"
 
 nmcli connection delete "$WIFI_CONNECTION" >/dev/null 2>&1 || true
 nmcli connection delete "$HOTSPOT_CONNECTION" >/dev/null 2>&1 || true

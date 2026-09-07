@@ -250,6 +250,8 @@
         const operatorUser = document.getElementById('settings-operator-user');
         wifiSsid.value = settings.wifi_ssid || '';
         hotspotSsid.value = settings.hotspot_ssid || 'N0JCG-WES';
+        document.getElementById('settings-wifi-password').value = settings.wifi_password || '';
+        document.getElementById('settings-hotspot-password').value = settings.hotspot_password || '';
         wifiSsid.dataset.original = wifiSsid.value;
         hotspotSsid.dataset.original = hotspotSsid.value;
         document.getElementById('settings-auto-hotspot').checked = Boolean(settings.auto_hotspot);

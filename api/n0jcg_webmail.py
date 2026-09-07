@@ -1234,38 +1234,15 @@ def apply_radio_profile(data):
 
 def operator_connectivity():
     config = {}
-    path = Path("/etc/n0jcg-winlink/network.conf")
     try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if "=" in line:
-                key, value = line.split("=", 1)
-                config[key] = value.strip().strip("'\"")
-    except OSError:
+        saved = subprocess.run(
+            ["sudo", "-n", OPERATOR_SETTINGS_SCRIPT, "--read-network"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if saved.returncode == 0:
+            config = json.loads(saved.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
         pass
-    # Older installations did not persist the infrastructure Wi-Fi SSID in
-    # network.conf. Read it from the active NetworkManager profile when it is
-    # available so the operator panel still shows the current network.
-    if not config.get("N0JCG_WIFI_SSID"):
-        try:
-            active = subprocess.run(
-                ["nmcli", "-t", "-f", "DEVICE,TYPE,CONNECTION", "device", "status"],
-                capture_output=True, text=True, timeout=5,
-            )
-            connection = ""
-            for line in active.stdout.splitlines():
-                fields = line.split(":", 2)
-                if len(fields) == 3 and fields[1] == "wifi" and fields[2] != "--":
-                    connection = fields[2]
-                    break
-            if connection:
-                profile = subprocess.run(
-                    ["nmcli", "-g", "802-11-wireless.ssid", "connection", "show", connection],
-                    capture_output=True, text=True, timeout=5,
-                )
-                if profile.stdout.strip():
-                    config["N0JCG_WIFI_SSID"] = profile.stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            pass
     operator_user = ""
     try:
         for line in Path("/etc/n0jcg-winlink/operator.conf").read_text(encoding="utf-8").splitlines():
@@ -1284,9 +1261,11 @@ def operator_connectivity():
         return subprocess.run(["systemctl", "is-enabled", "--quiet", service], capture_output=True).returncode == 0
     return {
         "wifi_ssid": config.get("N0JCG_WIFI_SSID", ""),
+        "wifi_password": config.get("wifi_password", ""),
         "wifi_device": config.get("N0JCG_WIFI_DEVICE", ""),
         "wifi_disabled": config.get("N0JCG_WIFI_DISABLED", "1") == "1",
         "hotspot_ssid": config.get("N0JCG_AP_SSID", "N0JCG-WES"),
+        "hotspot_password": config.get("hotspot_password", ""),
         "auto_hotspot": config.get("N0JCG_AUTO_HOTSPOT", "1") == "1",
         "hotspot_active": active("n0jcg-network-fallback.service"),
         "usb_gadget_enabled": enabled("n0jcg-usb-gadget.service"),
