@@ -27,5 +27,7 @@ if [[ -n "$GPS_DEVICE" ]]; then
 else
     echo "INFO: no stable USB GPS identity found; gpsd will remain available for auto-detection"
 fi
-sudo systemctl enable --now gpsd.socket >/dev/null 2>&1 || true
-sudo systemctl restart gpsd.service >/dev/null 2>&1 || true
+# GPS is intentionally on demand. WES starts it only while the operator asks
+# for a GPS fix, then stops it again before RF work can use the USB bus.
+sudo systemctl disable --now gpsd.socket gpsd.service >/dev/null 2>&1 || true
+echo "PASS: gpsd configured for on-demand polling"

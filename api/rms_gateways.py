@@ -23,6 +23,7 @@ STATUS_URL = os.environ.get("N0JCG_RMS_STATUS_URL", "https://api.winlink.org/gat
 # This is the public API access key used by Pat's RMS status client. Operators
 # may replace it through the environment without changing application code.
 STATUS_ACCESS_KEY = os.environ.get("N0JCG_RMS_STATUS_ACCESS_KEY", "1880278F11684B358F36845615BD039A")
+GPS_GUARD = "/usr/local/sbin/n0jcg-gps-rf-guard"
 
 
 def _number(value):
@@ -159,12 +160,23 @@ def refresh_cache(timeout=20):
 
 
 def _read_gpsd():
+    started = False
+    try:
+        started = subprocess.run(["sudo", "-n", GPS_GUARD, "start"], capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        pass
     try:
         # gpspipe's first record is normally VERSION/DEVICES/WATCH metadata;
         # read several reports so a TPV position can actually be observed.
         result = subprocess.run(["gpspipe", "-w", "-n", "10"], capture_output=True, text=True, timeout=6)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
+    finally:
+        if started:
+            try:
+                subprocess.run(["sudo", "-n", GPS_GUARD, "stop"], capture_output=True, timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                pass
     for line in result.stdout.splitlines():
         try:
             value = json.loads(line)

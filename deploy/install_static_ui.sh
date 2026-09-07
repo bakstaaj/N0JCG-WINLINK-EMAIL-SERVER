@@ -140,6 +140,7 @@ sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-network-fallback.sh" "$APP_ROOT/to
 sudo install -m 0755 "$REPO_ROOT/deploy/update_standard_forms.sh" "$APP_ROOT/tools/update_standard_forms.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/configure_packet_radio.sh" "$APP_ROOT/tools/configure_packet_radio.sh"
 sudo install -m 0755 "$REPO_ROOT/deploy/setup_digirig.sh" "$APP_ROOT/tools/setup_digirig.sh"
+sudo install -m 0755 "$REPO_ROOT/deploy/n0jcg-gps-rf-guard.sh" /usr/local/sbin/n0jcg-gps-rf-guard
 sudo install -m 0755 "$REPO_ROOT/deploy/apply_radio_profile.sh" "$APP_ROOT/tools/apply_radio_profile.sh"
 sudo install -m 0755 "$REPO_ROOT/tools/wes_direwolf_autogain.py" /usr/local/sbin/n0jcg-wes-direwolf-autogain
 sudo install -m 0755 "$REPO_ROOT/tools/wes_audio_tee.py" /usr/local/sbin/n0jcg-wes-audio-tee
@@ -189,6 +190,7 @@ sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" "$A
 sed "s/@APP_USER@/$APP_USER/g" "$REPO_ROOT/deploy/n0jcg-agwpe-identity-bridge.service" | sudo tee /etc/systemd/system/n0jcg-agwpe-identity-bridge.service >/dev/null
 sed -e "s/@APP_USER@/$APP_USER/g" -e "s#@DIREWOLF_BIN@#$DIREWOLF_BIN#g" "$REPO_ROOT/deploy/n0jcg-direwolf.service" | sudo tee /etc/systemd/system/n0jcg-direwolf.service >/dev/null
 printf '%s ALL=(root) NOPASSWD: %s/tools/apply_radio_profile.sh\n' "$APP_USER" "$APP_ROOT" | sudo tee /etc/sudoers.d/n0jcg-radio-profile >/dev/null
+printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/n0jcg-gps-rf-guard\n' "$APP_USER" | sudo tee -a /etc/sudoers.d/n0jcg-radio-profile >/dev/null
 sudo chmod 0440 /etc/sudoers.d/n0jcg-radio-profile
 sudo install -m 0644 "$REPO_ROOT/deploy/nginx/n0jcg-winlink.conf" "$NGINX_SITE"
 sudo rm -f /etc/nginx/sites-enabled/default

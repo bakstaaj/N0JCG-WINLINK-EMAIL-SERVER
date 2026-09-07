@@ -163,6 +163,9 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("n0jcg-gps", script)
         self.assertIn("readlink -f", script)
         self.assertIn("gpsd treats DEVICES literally", script)
+        self.assertIn("on-demand polling", script)
+        self.assertIn("disable --now gpsd.socket gpsd.service", script)
+        self.assertIn('GPS_GUARD = "/usr/local/sbin/n0jcg-gps-rf-guard"', source)
 
     def test_authentication_progress_has_safe_granular_stages(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
@@ -294,6 +297,17 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("PAT_RF_COOLDOWN_SECONDS", source)
         self.assertIn("def stop_all_pat_sessions(message, cooldown=True):", source)
         self.assertIn("time.sleep(PAT_RF_COOLDOWN_SECONDS)", source)
+
+    def test_rf_session_pauses_and_restores_gpsd(self):
+        source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
+        guard = (ROOT / "deploy" / "n0jcg-gps-rf-guard.sh").read_text(encoding="utf-8")
+        installer = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
+        self.assertIn("_pause_gps_for_rf", source)
+        self.assertIn("_resume_gps_after_rf", source)
+        self.assertIn('"gps_paused": gps_paused', source)
+        self.assertIn("systemctl stop gpsd.service gpsd.socket", guard)
+        self.assertIn("systemctl restart gpsd.service", guard)
+        self.assertIn("n0jcg-gps-rf-guard", installer)
 
     def test_new_login_is_appliance_wide_single_user(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")

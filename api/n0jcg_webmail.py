@@ -70,6 +70,7 @@ PAT_PROGRESS_GRACE = int(os.environ.get("N0JCG_PAT_PROGRESS_GRACE_SECONDS", str(
 # Allow the radio, AGWPE bridge, and PTT path to settle after a forced stop.
 # This is deliberately independent of the radio profile and RMS settings.
 PAT_RF_COOLDOWN_SECONDS = int(os.environ.get("N0JCG_PAT_RF_COOLDOWN_SECONDS", "10"))
+GPS_RF_GUARD = "/usr/local/sbin/n0jcg-gps-rf-guard"
 PAT_TELNET_URL = os.environ.get("N0JCG_PAT_TELNET_URL", "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k")
 PAT_CONNECT_URL = os.environ.get("N0JCG_PAT_CONNECT_URL", "")
 PAT_PACKET_CALLSIGN = os.environ.get("N0JCG_PACKET_CALLSIGN", "")
@@ -413,6 +414,24 @@ def reset_single_user_appliance(message):
     return stop_all_pat_sessions(message, cooldown=True)
 
 
+def _pause_gps_for_rf() -> bool:
+    """Release the GPS serial device while the DigiRig owns the USB bus."""
+    try:
+        result = subprocess.run(["sudo", "-n", GPS_RF_GUARD, "pause"], capture_output=True, timeout=5)
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _resume_gps_after_rf(paused: bool) -> None:
+    if not paused:
+        return
+    try:
+        subprocess.run(["sudo", "-n", GPS_RF_GUARD, "resume"], capture_output=True, timeout=8)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def _pat_sync_worker(callsign, password, config, process, job):
     """Keep the RF exchange alive after CMS authentication and report progress."""
     try:
@@ -658,6 +677,7 @@ def _pat_sync_worker(callsign, password, config, process, job):
                 job["message"] = meaningful_pat_error(str(exc), job.get("stage", ""))
                 job["error_event"].set()
     finally:
+        _resume_gps_after_rf(bool(job.get("gps_paused")))
         config.unlink(missing_ok=True)
 
 
@@ -715,17 +735,19 @@ def start_pat_sync(callsign, password, restart=False):
     profile_url = f"ax25+agwpe:///{profile_target}" if profile_target else ""
     connect_url = (profile_url or PAT_CONNECT_URL or PAT_TELNET_URL).replace("{mycall}", callsign)
     command = [PAT_BIN, "--config", str(config), "--mycall", callsign, "--mbox", str(mailbox_dir), "connect", connect_url]
+    registration = registration_status()
+    gps_paused = _pause_gps_for_rf()
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
     except FileNotFoundError:
         alternate = shutil.which("pat")
         if not alternate:
+            _resume_gps_after_rf(gps_paused)
             config.unlink(missing_ok=True)
             raise RuntimeError("Pat client is not installed on the appliance.")
         command[0] = alternate
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env={**os.environ, "PAT_MYCALL": callsign, "PAT_SECURE_LOGIN_PASSWORD": password})
-    registration = registration_status()
-    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "proposal_count": 0, "proposal_ids": set(), "window_count": None, "outgoing_count": 0, "download_limit": None if registration["registered"] else 1, "trial_limit_reached": False, "last_line": "", "events": [], "auth_event": threading.Event(), "error_event": threading.Event()}
+    job = {"callsign": callsign, "process": process, "state": "CONNECTING", "stage": "connecting", "stage_label": "Contacting RMS", "message": f"Contacting Packet RMS gateway {profile_target or 'configured target'}.", "rms_target": profile_target, "started_at": time.time(), "monotonic_started": time.monotonic(), "updated_at": time.time(), "received": 0, "sent": 0, "pending_count": None, "proposal_count": 0, "proposal_ids": set(), "window_count": None, "outgoing_count": 0, "download_limit": None if registration["registered"] else 1, "trial_limit_reached": False, "last_line": "", "events": [], "auth_event": threading.Event(), "error_event": threading.Event(), "gps_paused": gps_paused}
     with LOCK:
         SYNC_JOBS[callsign] = job
     record_sync_event(job, "Pat/RMS", f"Session started; target={profile_target or 'configured target'}")
