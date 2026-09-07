@@ -614,6 +614,8 @@
   function resetMailboxState() {
     currentCallsign = '';
     if (mailUser) mailUser.textContent = '';
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) authMessage(loginForm, '');
     if (mailboxBadge) {
       mailboxBadge.className = 'status-badge status-unavailable';
       mailboxBadge.textContent = '! Mailbox: Sign in required';

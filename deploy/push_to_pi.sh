@@ -38,6 +38,15 @@ if [[ -z "${N0JCG_PI_PASSWORD:-}" ]]; then
 fi
 export SSHPASS="$N0JCG_PI_PASSWORD"
 
+# Capture the running boot instance before installation. The installer
+# schedules a delayed reboot; an HTTP/service check alone can otherwise pass
+# against the old boot before the reboot has actually happened.
+PRE_INSTALL_BOOT_ID="$(sshpass -e ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "cat /proc/sys/kernel/random/boot_id")"
+[[ "$PRE_INSTALL_BOOT_ID" =~ ^[0-9a-f-]{36}$ ]] || {
+    echo "FAIL: could not capture the Pi boot identity before installation" >&2
+    exit 1
+}
+
 for option in "${3:-}" "${4:-}"; do
     [[ -z "$option" ]] && continue
     case "$option" in
@@ -142,17 +151,30 @@ if [[ -n "$AUTH_ENV_FILE" ]]; then
     sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "rm -f '$REMOTE_AUTH_ENV'"
 fi
 echo "INFO: waiting for the Pi to reboot and return online..."
-verified=0
+disconnected=0
 for attempt in {1..30}; do
-    if sshpass -e ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "grep -q PAT_TELNET_URL /opt/n0jcg-winlink/api/n0jcg_webmail.py && systemctl is-active --quiet n0jcg-webmail.service" >/dev/null 2>&1; then
-        verified=1
+    if ! sshpass -e ssh -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "true" >/dev/null 2>&1; then
+        disconnected=1
+        break
+    fi
+    sleep 1
+done
+if [[ "$disconnected" != "1" ]]; then
+    echo "FAIL: Pi never went offline after the installer scheduled the reboot" >&2
+    exit 1
+fi
+rebooted=0
+for attempt in {1..60}; do
+    current_boot_id="$(sshpass -e ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "cat /proc/sys/kernel/random/boot_id" 2>/dev/null || true)"
+    if [[ "$current_boot_id" != "$PRE_INSTALL_BOOT_ID" && "$current_boot_id" =~ ^[0-9a-f-]{36}$ ]] && sshpass -e ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "grep -q PAT_TELNET_URL /opt/n0jcg-winlink/api/n0jcg_webmail.py && systemctl is-active --quiet n0jcg-webmail.service" >/dev/null 2>&1; then
+        rebooted=1
         break
     fi
     sleep 2
 done
-if [[ "$verified" != "1" ]]; then
-    echo "FAIL: Pi did not return with an active Webmail service after reboot" >&2
+if [[ "$rebooted" != "1" ]]; then
+    echo "FAIL: Pi did not return with a new boot identity and active Webmail service" >&2
     exit 1
 fi
-echo "PASS: deployed API and active service verified after reboot"
+echo "PASS: Pi reboot completed; new boot and active service verified"
 unset N0JCG_PI_PASSWORD SSHPASS

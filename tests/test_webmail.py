@@ -115,6 +115,7 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("RMS session-clear wait is complete", script)
         self.assertIn("A new credential attempt must start with a blank, hidden mailbox", script)
         self.assertIn("currentCallsign = '';", script)
+        self.assertIn("if (loginForm) authMessage(loginForm, '');", script)
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")
         self.assertIn('self.send_json(HTTPStatus.UNAUTHORIZED, {"error": evidence, "source": "pat"}, clear_session_cookie())', source)
 
@@ -204,7 +205,9 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("systemd-run", installer)
         self.assertIn("systemctl reboot", installer)
         self.assertIn("waiting for the Pi to reboot", deployer)
-        self.assertIn("verified after reboot", deployer)
+        self.assertIn("PRE_INSTALL_BOOT_ID", deployer)
+        self.assertIn("Pi never went offline", deployer)
+        self.assertIn("new boot identity", deployer)
 
     def test_installer_installs_and_resolves_direwolf_binary(self):
         installer = (ROOT / "deploy" / "install_static_ui.sh").read_text(encoding="utf-8")
