@@ -1516,6 +1516,20 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     payload = refresh_cache()
                 except (OSError, RuntimeError, ValueError, urllib.error.URLError) as exc:
+                    # Offline field operation is expected. Keep the existing
+                    # cache usable and let the UI refresh its nearby results.
+                    cached = cache_payload()
+                    records = cached.get("records", []) if isinstance(cached, dict) else []
+                    if records:
+                        self.send_json(HTTPStatus.OK, {
+                            "updated": False,
+                            "cached": True,
+                            "count": int(cached.get("count", len(records))),
+                            "updated_at": cached.get("updated_at"),
+                            "warning": f"Internet unavailable; using the cached RMS gateway list. ({exc})",
+                            "source": cached.get("source", "winlink_rms_status"),
+                        })
+                        return
                     self.send_json(HTTPStatus.BAD_GATEWAY, {"error": f"RMS gateway list update failed: {exc}", "source": "winlink_rms_status"})
                     return
                 self.send_json(HTTPStatus.OK, {"updated": True, **payload})

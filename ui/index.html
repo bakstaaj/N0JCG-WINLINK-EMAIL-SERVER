@@ -384,7 +384,7 @@
     });
     document.getElementById('refresh-gateways').addEventListener('click', async (event) => {
       const button = event.currentTarget; const message = document.getElementById('gateway-message'); button.disabled = true; message.textContent = 'Downloading the official Winlink Packet gateway list…';
-      try { const response = await fetch('../api/v1/operator/rms-gateways/refresh', { method: 'POST' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Gateway list update failed.'); message.textContent = `Cached ${data.count} Packet gateway channels for field use.`; await loadGateways(); } catch (error) { message.textContent = error.message; } finally { button.disabled = false; }
+      try { const response = await fetch('../api/v1/operator/rms-gateways/refresh', { method: 'POST' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Gateway list update failed.'); message.textContent = data.warning || `Cached ${data.count} Packet gateway channels for field use.`; await loadGateways(); } catch (error) { message.textContent = error.message; } finally { button.disabled = false; }
     });
     radioForm.addEventListener('submit', async (event) => {
       event.preventDefault();
