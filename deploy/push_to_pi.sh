@@ -128,6 +128,12 @@ sshpass -e scp -o StrictHostKeyChecking=accept-new -r \
     "$REPO_ROOT/config" "$REPO_ROOT/deploy" "$REPO_ROOT/tools" \
     "$REPO_ROOT/api" "$REMOTE_HOST:$REMOTE_ROOT/"
 
+# A Windows/MSYS2 checkout or transfer layer can leave uploaded shell scripts
+# with CRLF endings. Normalize the installer before invoking it; the installer
+# cannot normalize itself after Bash has already parsed line 2.
+sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" \
+    "find '$REMOTE_ROOT/deploy' '$REMOTE_ROOT/tools' -type f -name '*.sh' -exec sed -i 's/\\r$//' {} +"
+
 if [[ -n "$CONNECTIVITY_ENV_FILE" ]]; then
     sshpass -e scp -o StrictHostKeyChecking=accept-new "$CONNECTIVITY_ENV_FILE" "$REMOTE_HOST:$REMOTE_CONNECTIVITY_ENV"
 fi
