@@ -54,6 +54,8 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y network-manager dnsmasq iptables
 systemctl enable --now NetworkManager.service
 install -d -m 0755 "$CONFIG_DIR"
+install -d -m 0755 /etc/NetworkManager/dnsmasq-shared.d
+install -m 0644 "$(dirname "$0")/n0jcg-hotspot-dnsmasq.conf" /etc/NetworkManager/dnsmasq-shared.d/n0jcg-hotspot.conf
 
 NETWORK_BACKEND="$(detect_network_backend)"
 echo "INFO: detected network backend: $NETWORK_BACKEND"

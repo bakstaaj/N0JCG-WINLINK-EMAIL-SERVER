@@ -106,6 +106,8 @@ fi
 
 sudo install -d -m 0755 "$INSTALL_ROOT/ui" "$INSTALL_ROOT/webmail" "$INSTALL_ROOT/branding" "$INSTALL_ROOT/assets/brand"
 sudo install -d -m 0755 "$APP_ROOT/api" "$APP_ROOT/config" "$APP_ROOT/tools" /var/lib/n0jcg-winlink /var/lib/n0jcg-winlink-webmail
+sudo install -d -m 0755 /etc/NetworkManager/dnsmasq-shared.d
+sudo install -m 0644 "$REPO_ROOT/deploy/n0jcg-hotspot-dnsmasq.conf" /etc/NetworkManager/dnsmasq-shared.d/n0jcg-hotspot.conf
 # Ubuntu-based images, including Orange Pi images, may not create Debian's
 # optional Nginx site directories. Create them before installing the site and
 # snippet configuration so first deployment works on either layout.
