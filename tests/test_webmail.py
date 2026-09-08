@@ -81,6 +81,8 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("n0jcg-usb-gadget-remove.sh", installer)
         self.assertIn("n0jcg-usb-network.sh", installer)
         self.assertIn("n0jcg-usb-network.service", installer)
+        push = (ROOT / "deploy" / "push_to_pi.sh").read_text(encoding="utf-8")
+        self.assertIn('"$REPO_ROOT/VERSION"', push)
         self.assertIn("n0jcg-hotspot-dnsmasq.conf", installer)
         self.assertIn("n0jcg-hotspot-dnsmasq.conf", (ROOT / "deploy" / "setup_connectivity.sh").read_text(encoding="utf-8"))
         nginx = (ROOT / "deploy" / "nginx" / "n0jcg-winlink.conf").read_text(encoding="utf-8")

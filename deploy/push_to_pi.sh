@@ -124,7 +124,7 @@ done
 
 sshpass -e ssh -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "mkdir -p '$REMOTE_ROOT'"
 sshpass -e scp -o StrictHostKeyChecking=accept-new -r \
-    "$REPO_ROOT/ui" "$REPO_ROOT/branding" "$REPO_ROOT/assets" \
+    "$REPO_ROOT/VERSION" "$REPO_ROOT/ui" "$REPO_ROOT/branding" "$REPO_ROOT/assets" \
     "$REPO_ROOT/config" "$REPO_ROOT/deploy" "$REPO_ROOT/tools" \
     "$REPO_ROOT/api" "$REMOTE_HOST:$REMOTE_ROOT/"
 
