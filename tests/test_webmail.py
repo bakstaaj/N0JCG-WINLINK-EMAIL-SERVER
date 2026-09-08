@@ -87,6 +87,7 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn("n0jcg-hotspot-dnsmasq.conf", (ROOT / "deploy" / "setup_connectivity.sh").read_text(encoding="utf-8"))
         nginx = (ROOT / "deploy" / "nginx" / "n0jcg-winlink.conf").read_text(encoding="utf-8")
         self.assertIn("$server_addr = 192.168.50.1", nginx)
+        self.assertIn("location = /VERSION", nginx)
         self.assertIn("using the cached RMS gateway list", source)
         self.assertIn("read_secrets", helper)
         self.assertIn("--read-network", helper)
