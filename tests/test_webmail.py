@@ -27,6 +27,10 @@ class WebmailHelpersTests(unittest.TestCase):
         self.assertIn('name="license_serial"', ui)
         self.assertIn('name="email"', ui)
         self.assertIn("Registered email", ui)
+        webmail_ui = (ROOT / "ui" / "webmail" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("data-release-version", ui + webmail_ui)
+        self.assertNotIn("v0.1.18", ui + webmail_ui)
+        self.assertRegex((ROOT / "VERSION").read_text(encoding="utf-8").strip(), r"^\d+\.\d+\.\d+$")
 
     def test_operator_settings_cover_connectivity_and_credentials(self):
         source = (ROOT / "api" / "n0jcg_webmail.py").read_text(encoding="utf-8")

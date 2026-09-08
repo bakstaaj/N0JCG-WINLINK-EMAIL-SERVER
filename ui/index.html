@@ -36,8 +36,17 @@
     </section>
     <section id="audio-calibration" class="card"><div class="card-heading"><h2>Receive-only audio calibration</h2><span id="calibration-status" class="status status-unknown">Stopped</span></div><p class="muted">Noise-floor mode: leave the radio in monitor/open-squelch, then adjust only the WES radio volume. Starting this test pauses Dire Wolf briefly; it never starts Pat, keys PTT, or transmits RF.</p><div class="calibration-metrics"><div><span>Noise-floor quality</span><strong id="calibration-quality">—</strong></div><div><span>Latest peak</span><strong id="calibration-level">—</strong></div><div><span>Average RMS</span><strong id="calibration-average">—</strong></div><div><span>RMS dBFS</span><strong id="calibration-rms">—</strong></div><div><span>Peak dBFS</span><strong id="calibration-peak">—</strong></div></div><button class="button" id="calibration-start" type="button">Start receive test</button> <button class="header-button" id="calibration-stop" type="button" disabled>Stop receive test</button><p id="calibration-guidance" class="muted">Start the test and adjust the radio volume until the noise floor says usable noise floor.</p><pre id="calibration-log" class="calibration-log">No calibration evidence collected.</pre><hr><h3>Automatic RMS receive calibration</h3><p class="muted">Runs up to ten short RMS sessions, displays every packet level and S/N result, and stops at the maximum useful gain; noise alone never increases gain.</p><button class="button" id="autogain-toggle" type="button">Run RMS receive calibration</button><p id="autogain-status" class="muted">Ready to run.</p><pre id="autogain-log" class="calibration-log">No automatic calibration evidence collected.</pre></section>
   </main>
-  <footer class="footer"><span>N0JCG Winlink Email Server v0.1.18 <span aria-hidden="true">|</span> N0JCG Open Radio Platform</span><nav class="footer-links" aria-label="N0JCG links"><a href="https://n0jcg.com/" target="_blank" rel="noopener noreferrer">Website</a><a href="https://www.linkedin.com/company/n0jcg/" target="_blank" rel="noopener noreferrer">LinkedIn</a><a href="https://x.com/N0JCG" target="_blank" rel="noopener noreferrer">X</a></nav></footer>
+  <footer class="footer"><span>N0JCG Winlink Email Server <span data-release-version>release</span> <span aria-hidden="true">|</span> N0JCG Open Radio Platform</span><nav class="footer-links" aria-label="N0JCG links"><a href="https://n0jcg.com/" target="_blank" rel="noopener noreferrer">Website</a><a href="https://www.linkedin.com/company/n0jcg/" target="_blank" rel="noopener noreferrer">LinkedIn</a><a href="https://x.com/N0JCG" target="_blank" rel="noopener noreferrer">X</a></nav></footer>
   <script>
+    async function loadReleaseVersion() {
+      try {
+        const response = await fetch('../VERSION', { cache: 'no-store' });
+        if (!response.ok) return;
+        const version = (await response.text()).trim();
+        if (version) document.querySelectorAll('[data-release-version]').forEach((element) => { element.textContent = `v${version}`; });
+      } catch (_) {}
+    }
+    loadReleaseVersion();
     let calibrationTimer = null;
     let calibrationActive = false;
     function calibrationMessage(message, isError = false) {

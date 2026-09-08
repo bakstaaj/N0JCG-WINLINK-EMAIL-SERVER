@@ -116,6 +116,7 @@ sudo systemctl enable --now nginx
 sudo chown "$APP_USER:$APP_USER" /var/lib/n0jcg-winlink
 sudo install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.local/state/pat" "/home/$APP_USER/.config/pat" "/home/$APP_USER/.local/share/pat"
 sudo install -m 0644 "$REPO_ROOT/ui/index.html" "$INSTALL_ROOT/ui/index.html"
+sudo install -m 0644 "$REPO_ROOT/VERSION" "$INSTALL_ROOT/VERSION"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/ui/styles.css"
 sudo install -m 0644 "$REPO_ROOT/ui/styles.css" "$INSTALL_ROOT/styles.css"
 sudo install -m 0644 "$REPO_ROOT/ui/webmail/index.html" "$INSTALL_ROOT/webmail/index.html"

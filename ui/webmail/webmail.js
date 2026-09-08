@@ -1,4 +1,8 @@
 (() => {
+  fetch('/VERSION', { cache: 'no-store' }).then((response) => response.ok ? response.text() : '').then((version) => {
+    version = version.trim();
+    if (version) document.querySelectorAll('[data-release-version]').forEach((element) => { element.textContent = `v${version}`; });
+  }).catch(() => {});
   const folderTitle = document.getElementById('folder-title');
   const folderView = document.getElementById('folder-view');
   const composeView = document.getElementById('compose-view');
