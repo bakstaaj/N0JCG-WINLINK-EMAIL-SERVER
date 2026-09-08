@@ -178,11 +178,16 @@ def apply_network(settings):
         nm("connection", "up", HOTSPOT_CONNECTION, "ifname", wifi_device, check=False)
         run("/usr/bin/systemctl", "restart", "n0jcg-network-fallback.service", check=False)
     elif settings["disable_wifi"] is False and wifi_device:
+        # The adapter cannot reliably transition from AP to client mode while
+        # the fallback watcher and hotspot profile are still active. Stop the
+        # watcher and tear down the AP before asking NetworkManager to join the
+        # saved LAN profile.
+        run("/usr/bin/systemctl", "disable", "--now", "n0jcg-network-fallback.service", check=False)
+        nm("connection", "down", HOTSPOT_CONNECTION, check=False)
         if wifi_connection:
             nm("connection", "modify", wifi_connection, "connection.autoconnect", "yes", check=False)
         nm("connection", "modify", HOTSPOT_CONNECTION, "connection.autoconnect", "no", check=False)
         nm("device", "connect", wifi_device, check=False)
-        run("/usr/bin/systemctl", "restart", "n0jcg-network-fallback.service", check=False)
     if hotspot_mode:
         run("/usr/bin/systemctl", "enable", "--now", "n0jcg-network-fallback.service", check=False)
         if hotspot_changed and hotspot_was_active:
@@ -191,6 +196,9 @@ def apply_network(settings):
             nm("connection", "down", HOTSPOT_CONNECTION, check=False)
             nm("connection", "up", HOTSPOT_CONNECTION, check=False)
     elif settings["disable_wifi"] is False:
+        # The transition branch above already stopped the service and AP.
+        # Keep this for callers that change only the mode flag without a
+        # usable Wi-Fi device.
         run("/usr/bin/systemctl", "disable", "--now", "n0jcg-network-fallback.service", check=False)
         nm("connection", "down", HOTSPOT_CONNECTION, check=False)
     if settings["usb_gadget"] is True:
