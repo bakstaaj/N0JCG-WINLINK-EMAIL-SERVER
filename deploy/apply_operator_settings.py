@@ -107,7 +107,9 @@ def write_config(values):
     CONFIG.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
     lines = [f"{key}={shlex.quote(value)}" for key, value in merged.items() if key.startswith("N0JCG_")]
     CONFIG.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    os.chmod(CONFIG, 0o600)
+    # This file contains only non-secret network identity and mode settings;
+    # passwords are kept separately in network-secrets.conf.
+    os.chmod(CONFIG, 0o644)
 
 
 def write_secrets(values):
@@ -128,7 +130,11 @@ def apply_network(settings):
     hotspot_changed = bool(settings["hotspot_ssid"] and settings["hotspot_ssid"] != current_hotspot_ssid)
     hotspot_ssid = settings["hotspot_ssid"] or current_hotspot_ssid
     hotspot_password = settings["hotspot_password"] or secrets.get("N0JCG_AP_PASSWORD", "")
-    wifi_disabled = settings["disable_wifi"] is True
+    # Hotspot mode is one operator-facing choice.  Keep accepting the legacy
+    # auto_hotspot field from older clients, but derive the effective service
+    # state from disable_wifi so the two controls cannot drift apart.
+    hotspot_mode = settings["disable_wifi"] is True
+    wifi_disabled = hotspot_mode
     wifi_connection = current.get("N0JCG_WIFI_CONNECTION", "")
     if settings["wifi_ssid"] and wifi_device and not wifi_disabled:
         if not connection_exists(WIFI_CONNECTION):
@@ -147,8 +153,8 @@ def apply_network(settings):
     values = {"N0JCG_WIFI_DEVICE": wifi_device, "N0JCG_WIFI_SSID": wifi_ssid, "N0JCG_NETWORK_BACKEND": "networkmanager"}
     if settings["hotspot_ssid"]:
         values["N0JCG_AP_SSID"] = settings["hotspot_ssid"]
-    if settings["auto_hotspot"] is not None:
-        values["N0JCG_AUTO_HOTSPOT"] = "1" if settings["auto_hotspot"] else "0"
+    if settings["disable_wifi"] is not None:
+        values["N0JCG_AUTO_HOTSPOT"] = "1" if hotspot_mode else "0"
     if settings["disable_wifi"] is not None:
         values["N0JCG_WIFI_DISABLED"] = "1" if wifi_disabled else "0"
     write_config(values)
@@ -177,14 +183,14 @@ def apply_network(settings):
         nm("connection", "modify", HOTSPOT_CONNECTION, "connection.autoconnect", "no", check=False)
         nm("device", "connect", wifi_device, check=False)
         run("/usr/bin/systemctl", "restart", "n0jcg-network-fallback.service", check=False)
-    if settings["auto_hotspot"] is True:
+    if hotspot_mode:
         run("/usr/bin/systemctl", "enable", "--now", "n0jcg-network-fallback.service", check=False)
         if hotspot_changed and hotspot_was_active:
             # NetworkManager does not renegotiate an active AP profile after
             # `connection modify`; cycle it so clients see the new SSID.
             nm("connection", "down", HOTSPOT_CONNECTION, check=False)
             nm("connection", "up", HOTSPOT_CONNECTION, check=False)
-    elif settings["auto_hotspot"] is False:
+    elif settings["disable_wifi"] is False:
         run("/usr/bin/systemctl", "disable", "--now", "n0jcg-network-fallback.service", check=False)
         nm("connection", "down", HOTSPOT_CONNECTION, check=False)
     if settings["usb_gadget"] is True:

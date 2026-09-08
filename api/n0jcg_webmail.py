@@ -13,6 +13,7 @@ never treated as mailbox ownership without Pat CMS evidence.
 
 import base64
 import atexit
+import shlex
 import http.cookies
 import json
 import math
@@ -1235,12 +1236,21 @@ def apply_radio_profile(data):
 def operator_connectivity():
     config = {}
     try:
+        path = Path("/etc/n0jcg-winlink/network.conf")
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                parsed = shlex.split(value, posix=True)
+                config[key] = parsed[0] if parsed else ""
+    except (OSError, ValueError):
+        pass
+    try:
         saved = subprocess.run(
             ["sudo", "-n", OPERATOR_SETTINGS_SCRIPT, "--read-network"],
             capture_output=True, text=True, timeout=5,
         )
         if saved.returncode == 0:
-            config = json.loads(saved.stdout)
+            config.update(json.loads(saved.stdout))
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
         pass
     operator_user = ""

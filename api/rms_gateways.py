@@ -6,6 +6,7 @@ without Internet access in the field.
 """
 
 import json
+import errno
 import math
 import os
 import subprocess
@@ -147,8 +148,13 @@ def cache_payload():
 def refresh_cache(timeout=20):
     query = urllib.parse.urlencode({"key": STATUS_ACCESS_KEY, "mode": "Packet", "HistoryHours": "48", "ServiceCodes": "PUBLIC"})
     request = urllib.request.Request(f"{STATUS_URL}?{query}", headers={"User-Agent": "N0JCG-Winlink-Email-Server/0.1"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        source_payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            source_payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        if isinstance(exc.reason, OSError) and exc.reason.errno == errno.EBUSY:
+            raise RuntimeError("Internet connection is unavailable; the cached RMS gateway list was not changed.") from exc
+        raise
     records = normalize_gateways(source_payload)
     if not records:
         raise RuntimeError("Winlink gateway list contained no usable Packet channels")
